@@ -1,180 +1,280 @@
-# AI Sales Agent — Telegram + n8n + Gemini
+# AI Sales Agent — Telegram Business + n8n + Gemini + Google Sheets
 
-An automated AI Sales Agent designed for a Philippine small business. The system integrates a personal Telegram seller account (via Telegram Connected Business Bot) with Google Sheets for real-time inventory and pricing lookup, and Google Gemini Flash-Lite for verified, context-aware customer service and sales conversations.
+[![n8n Community](https://img.shields.io/badge/n8n-2.44.6-EA4B71?logo=n8n)](https://n8n.io)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16--alpine-336791?logo=postgresql)](https://www.postgresql.org/)
+[![Google Gemini](https://img.shields.io/badge/Gemini-2.5--Flash--Lite-8E75B2?logo=google)](https://ai.google.dev/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)](https://www.docker.com/)
+[![Architecture](https://img.shields.io/badge/Arch-ARM64%20%7C%20AMD64-0078D4)](DEPLOYMENT.md)
+
+An enterprise-grade, privacy-respecting AI Sales Agent designed for a Philippine small business selling K-pop merchandise (SEVENTEEN photocards and albums). 
+
+The agent operates directly inside the seller's **existing personal Telegram account** via the **Telegram Connected Business Bot** API. Customers never interact with an impersonal public bot handle; every verified, polite, Taglish response is posted seamlessly inside the seller's personal direct message thread.
 
 ---
 
-## 1. Architecture Overview
+## 1. System Architecture
 
 ```mermaid
 flowchart TD
-    Customer([Telegram User]) <-->|Direct Message| TelegramSeller([Seller Personal Telegram Account])
-    TelegramSeller <-->|Business Bot Connection| TGServers[Telegram Bot API / Webhook]
+    Customer([Customer]) <-->|Direct Message| SellerTG([Seller Personal Telegram DM])
+    SellerTG <-->|Telegram Business Connection| TGServer[Telegram Bot API]
 
-    subgraph Local Dev Environment [Docker Compose Infrastructure]
-        subgraph Public Ingress [Secure Tunnel & Routing]
-            Cloudflare[Cloudflare Quick Tunnel] <-->|Internal Network| Nginx[Webhook Proxy - Nginx]
+    subgraph Infrastructure [Self-Hosted Production Stack]
+        subgraph Ingress [Reverse Proxy & Security Filtering]
+            Proxy[Nginx / Caddy Proxy]
         end
-        subgraph Application Core [n8n Workflow Engine]
-            Nginx -->|/webhook/* only| N8N([n8n Community Edition])
-            N8N <-->|Credentials & State| Postgres[(PostgreSQL 16)]
-            N8N -.->|Persists Workflows| VolN8N[(sales_agent_n8n_data)]
-            Postgres -.->|Persists Tables| VolPG[(sales_agent_postgres_data)]
+
+        subgraph Core [n8n Automation Engine]
+            MasterWF[Master Workflow: telegram_business_agent]
+            OwnerWF[Subworkflow: Owner Controls & Takeover]
+            KnowledgeWF[Subworkflow: Knowledge Retrieval]
+            GeminiWF[Subworkflow: Gemini Sales Agent]
+        end
+
+        subgraph Storage [PostgreSQL 16 Engine]
+            DB[(PostgreSQL Database)]
         end
     end
 
-    TGServers -->|HTTPS Webhook| Cloudflare
-    N8N -->|sendMessage on behalf of seller| TGServers
+    TGServer -->|HTTPS Webhook + Secret Token| Proxy
+    Proxy -->|Allowed: /webhook/* only (Admin 403)| MasterWF
+    MasterWF <-->|Atomic Deduplication| DB
+    MasterWF -->|Check Owner Command or Takeover| OwnerWF
+    OwnerWF <-->|Read / Write State| DB
+    MasterWF -->|Query Products / Rates / Policies| KnowledgeWF
+    KnowledgeWF <-->|Structured Fuzzy Match| DB
+    MasterWF -->|Grounded Prompt + Context| GeminiWF
+    GeminiWF -->|Grounded Taglish Response| MasterWF
+    MasterWF -->|Reply via business_connection_id| TGServer
 ```
 
-### End-to-End Conversation Flow (Phase 4):
-1. **Inbound Message**: Customer sends a direct message to the seller's personal Telegram account.
-2. **Business Bot Dispatch**: Telegram forwards the update (`business_message` or `business_connection`) to the registered public webhook.
-3. **Public Ingress Protection**: Cloudflare Quick Tunnel forwards the request to the `webhook_proxy` container. Nginx verifies the path:
-   - `/webhook/*` and `/webhook-test/*` are forwarded to n8n.
-   - All other routes (Admin UI, credentials, REST APIs) are strictly blocked with `403 Forbidden`.
-4. **Secret Token Verification**: n8n validates the `X-Telegram-Bot-Api-Secret-Token` header.
-5. **Event Routing**: Routes `business_message`, `business_connection`, or standard direct `message` updates.
-6. **Message Normalization**: Normalizes incoming payloads to a clean schema (`update_id`, `business_connection_id`, `chat_id`, `sender_id`, `message_id`, `text`, `timestamp`).
-7. **Authorization & Safety Filter**:
-   - `TELEGRAM_TEST_MODE` must be `true`.
-   - Message must contain valid text and a valid `business_connection_id`.
-   - Outgoing messages typed by the seller (`sender_id == TELEGRAM_SELLER_USER_ID`) are discarded.
-   - Bot-generated messages are discarded.
-   - Chat ID must exist in `TELEGRAM_ALLOWED_TEST_CHAT_IDS`.
-8. **Deduplication Check**: Queries PostgreSQL (`telegram_processed_updates`) to ensure atomic delivery without duplicate responses.
-9. **Automated Response**: Sends the predefined response on behalf of the seller:
-   > *"Hii po! 💗 This is Sash's automated shop assistant. We're currently testing our automatic replies!"*
+### Complete Inbound Message Lifecycle
+
+```
+[Customer DM in Telegram]
+         │
+         ▼
+[Telegram Bot API: business_message]
+         │ (HTTPS POST + X-Telegram-Bot-Api-Secret-Token)
+         ▼
+[Caddy / Nginx Reverse Proxy]
+         │ (Blocks /admin paths; passes /webhook/* only)
+         ▼
+[telegram_business_agent (Master)]
+         │
+         ├──> [1. Deduplication Check] ──> Duplicate update_id? ──> [Stop / Discard]
+         │
+         ├──> [2. Outgoing Loop Check] ──> From seller ID? ──> [Record Human Takeover & Pause Chat]
+         │
+         ├──> [3. Global Switch Check] ──> agent_control_state.is_enabled == false? ──> [Stop]
+         │
+         ├──> [4. Chat Pause Check]   ──> chat_conversation_state.is_paused == true? ──> [Stop]
+         │
+         ├──> [5. Knowledge Engine]   ──> Query 69 products, shipping, packing, and payment rules
+         │
+         ├──> [6. Gemini 2.5 Flash]   ──> Draft polite Taglish response with automated disclosure
+         │
+         ▼
+[Telegram API: sendMessage on behalf of seller]
+         │
+         ▼
+[Reply appears in customer's personal DM thread]
+```
 
 ---
 
-## 2. Infrastructure & Repository Structure
+## 2. Repository Layout
 
 ```
-├── .env.example                     # Environment template with Phase 4 Telegram variables
-├── .gitignore                       # Protects credentials, logs, and database dumps
-├── docker-compose.yml               # Multi-container orchestration (n8n, postgres, proxy, cloudflared)
-├── Product Info.csv                 # Source product catalog & pricing (Phase 0)
-├── README.md                        # Project documentation and operational guide
-├── backups/                         # Database and workflow backup snapshots
+.
+├── .env.example                       # Local development environment template
+├── .env.production.example            # Production environment template (Oracle ARM64)
+├── .gitignore                         # Strict exclusion for secrets, dumps, and credentials
+├── DEPLOYMENT.md                      # Oracle Cloud Always Free ARM64 deployment guide
+├── Product Info.csv                   # Reference product sheet
+├── README.md                          # Master documentation and operations manual
+├── docker-compose.yml                 # Local development multi-container orchestration
+├── docker-compose.prod.yml            # Production container orchestration (Caddy + n8n + PG)
+├── backups/                           # Automated database and workflow backups
+├── data/
+│   └── knowledge_base.json            # Parsed 69-product fixture, shipping rates, and policies
 ├── proxy/
-│   └── nginx.conf                   # Reverse proxy restricting public access to webhooks only
-├── scripts/                         # Automation & maintenance scripts
-│   ├── init-env.ps1 / .sh           # Secret token and environment initialization
-│   ├── init-tables.ps1 / .sh        # PostgreSQL tables initialization for state & deduplication
-│   ├── start-tunnel.ps1 / .sh       # Starts Cloudflare Tunnel, updates WEBHOOK_URL, and reloads n8n
-│   ├── register-webhook.ps1 / .sh   # Registers Telegram Webhook with secret token & business updates
-│   ├── import-workflow.ps1 / .sh    # Imports Phase 4 workflow JSON into n8n
-│   ├── backup.ps1 / .sh             # Database SQL dump and workflow export
-│   ├── verify-phase3.ps1            # Phase 3 local infrastructure test suite
-│   └── verify-phase4.ps1            # Phase 4 Telegram integration test suite
+│   ├── Caddyfile.prod                 # Production Caddy config (Automated TLS + path filter)
+│   ├── nginx.conf                     # Local development Nginx reverse proxy
+│   └── nginx.prod.conf                # Production Nginx reverse proxy alternative
+├── scripts/
+│   ├── backup.ps1 / .sh               # Database dump and workflow exporter
+│   ├── deploy-oracle.sh               # One-click Oracle Cloud ARM64 deployment script
+│   ├── import-workflow.ps1 / .sh      # Workflow importer
+│   ├── init-control-db.sql            # State schema (global toggle and per-chat pause)
+│   ├── init-db.sql                    # Core schema (deduplication and business connection)
+│   ├── init-env.ps1                   # Environment generator
+│   ├── init-knowledge-db.sql          # Product catalog and rates database schema
+│   ├── register-webhook.ps1 / .sh     # Webhook registration with Telegram API
+│   ├── restore.ps1 / .sh              # Database and workflow restoration script
+│   ├── start-tunnel.ps1 / .sh         # Cloudflare Quick Tunnel manager
+│   ├── sync-knowledge.ps1             # Synchronizes Google Sheets / fixtures to Postgres
+│   ├── test-acceptance-suite.ps1      # Phase 10 master acceptance test suite
+│   ├── test-phase5.ps1                # Knowledge base retrieval test suite
+│   ├── test-phase6.ps1                # Gemini AI sales dialogue simulation suite
+│   ├── test-phase7.ps1                # Owner controls and human takeover test suite
+│   ├── test-phase8.ps1                # Reliability, deduplication, and safety test suite
+│   ├── verify-oracle-connectivity.sh  # Production outbound API connectivity verifier
+│   ├── verify-phase3.ps1              # Infrastructure health verification
+│   └── verify-phase4.ps1              # Telegram integration verification
 └── workflows/
-    ├── .gitkeep
-    ├── README.md
-    └── telegram_business_agent.json # Version-controlled Phase 4 n8n workflow
+    ├── README.md                      # Detailed workflow architecture and IDs
+    ├── simulated_customer_test.json   # Simulation test harness
+    ├── subworkflow_gemini_agent.json  # Grounded Gemini prompt and persona
+    ├── subworkflow_knowledge_retrieval.json # PostgreSQL catalog lookup
+    ├── subworkflow_owner_controls.json# Commands and human takeover router
+    └── telegram_business_agent.json   # Master orchestrator workflow
 ```
 
 ---
 
-## 3. Configuration & Telegram Setup
+## 3. Owner Operations & Control Commands
 
-### Step 1: Configure `.env` Credentials
-Open `.env` (or run `./scripts/init-env.ps1`) and populate:
+The seller controls the AI assistant at any time by sending commands directly to their Telegram bot or typing inside the customer DM.
 
-```env
-# Bot Token from @BotFather for the Connected Business Bot
-TELEGRAM_BOT_TOKEN=123456789:ABCdefGhIJKlmNoPQRstuVWXyz
-
-# Seller's Telegram User ID (obtained via @userinfobot or message payload)
-TELEGRAM_SELLER_USER_ID=987654321
-
-# Secret Token for Webhook Verification (Auto-generated by init-env.ps1)
-TELEGRAM_WEBHOOK_SECRET=your_32_byte_random_secret
-
-# Development Safety Controls
-TELEGRAM_TEST_MODE=true
-TELEGRAM_ALLOWED_TEST_CHAT_IDS=1122334455
-```
-
-### Step 2: Configure Telegram Credentials in n8n
-1. Open n8n locally at [http://localhost:5678](http://localhost:5678).
-2. Go to **Credentials** -> **New Credential**.
-3. Select **Telegram API**.
-4. Paste your `TELEGRAM_BOT_TOKEN` and save as `Telegram Sales Agent Account`.
+| Command | Action | Scope | Description |
+| :--- | :--- | :--- | :--- |
+| `/status` | View Status | Global | Reports AI status (`ON`/`OFF`), active paused chats, and total inventory products. |
+| `/on` | Enable AI | Global | Activates automated responses for authorized customer inquiries. |
+| `/off` | Disable AI | Global | Instantly disables all automated customer replies. |
+| `/pause [chat_id]` | Pause Chat | Per-Chat | Silences AI for a specific customer without affecting other chats. |
+| `/resume [chat_id]`| Resume Chat | Per-Chat | Unpauses AI for that customer. |
+| *Manual Seller Typing* | Human Takeover | Per-Chat | When the seller sends any message in a customer DM, the system **automatically pauses** the AI for that chat. |
 
 ---
 
-## 4. Local Webhook & Tunnel Management
+## 4. Business Knowledge & Shop Policies
 
-Telegram requires an HTTPS endpoint with a valid TLS certificate. The local stack uses a Cloudflare Quick Tunnel paired with an Nginx reverse proxy.
+All pricing and answers adhere strictly to the shop's verified catalog and policies:
 
-### Starting / Restarting the Tunnel
+- **Currency**: Philippine Pesos (`₱` / `PHP`) default on all items.
+- **Product Catalog**: 69 authentic items across 13 SEVENTEEN members (S.Coups, Jeonghan, Joshua, Jun, Hoshi, Wonwoo, Woozi, DK, Mingyu, The8, Seungkwan, Vernon, Dino).
+- **Courier & Shipping Rates**: J&T Express only.
+  - Metro Manila: ₱74 (₱95 standard minus ₱21 shop voucher).
+  - Luzon: ₱99 (₱120 standard minus ₱21 shop voucher).
+  - Visayas: ₱114 (₱135 standard minus ₱21 shop voucher).
+  - Mindanao: ₱124 (₱145 standard minus ₱21 shop voucher).
+  - Island: ₱134 (₱155 standard minus ₱21 shop voucher).
+- **Packing Fees (PF)**:
+  - Small pouch / box: ₱20
+  - Medium pouch / box: ₱25
+  - Large box: ₱30
+- **Dispatch Days**: Strictly **Monday to Wednesday only**.
+- **Payment Methods**:
+  - GCash: `09976111139` (Account: `F. M. A.`)
+  - Maya: `09976111139` (Account: `F. M. A.`)
+  - MariBank: `13296983960` (Account: `F. M. A.`)
+- **Payment Terms**: 1 week payment deadline with an initial **30% non-refundable downpayment**.
+
+---
+
+## 5. Local Development Quickstart
+
+### Prerequisites
+- Docker Desktop running on Windows, macOS, or Linux.
+- PowerShell 5.1+ (Windows) or Bash (macOS/Linux).
+
+### Step 1: Initialize Configuration
 ```powershell
-./scripts/start-tunnel.ps1
+./scripts/init-env.ps1
 ```
-*(On Linux/macOS: `./scripts/start-tunnel.sh`)*
+Edit `.env` with your `TELEGRAM_BOT_TOKEN`, `TELEGRAM_SELLER_USER_ID`, and `GEMINI_API_KEY`.
 
-This script:
-1. Starts the `sales_agent_webhook_proxy` and `sales_agent_tunnel` containers.
-2. Extracts the assigned `https://*.trycloudflare.com` URL.
-3. Automatically updates `WEBHOOK_URL` in `.env`.
-4. Restarts `sales_agent_n8n` to bind the new webhook URL.
-
-> [!IMPORTANT]
-> Cloudflare Quick Tunnels are ephemeral and generate a new URL upon container restart. Whenever the tunnel restarts, re-register the webhook using Step 5.
-
-### Step 5: Registering the Webhook with Telegram
+### Step 2: Start Containers & Apply Database Schemas
 ```powershell
-./scripts/register-webhook.ps1
+docker compose up -d
+./scripts/sync-knowledge.ps1
 ```
-This registers the active tunnel URL with Telegram using `setWebhook`:
-- URL: `https://<assigned-tunnel>.trycloudflare.com/webhook/telegram-business`
-- Allowed Updates: `["business_connection", "business_message", "edited_business_message", "message"]`
-- Secret Token: Protected with `X-Telegram-Bot-Api-Secret-Token` header.
-- Drops any pending stale updates.
+
+### Step 3: Run Acceptance Test Suite
+```powershell
+./scripts/test-acceptance-suite.ps1
+```
+Expected output:
+```
+[PASS] Phase 3 - PostgreSQL Container Health
+[PASS] Phase 3 - n8n Container Health
+[PASS] Phase 4 - Nginx Webhook Proxy
+[PASS] Phase 4 - Admin Route Public Block
+[PASS] Phase 5 - Knowledge Base and Match Engine
+[PASS] Phase 6 - Gemini Sales Dialogue and Policies
+[PASS] Phase 7 - Owner Commands and Human Takeover
+[PASS] Phase 8 - Deduplication and Safety Gates
+Results: 8 Passed, 0 Failed.
+```
 
 ---
 
-## 5. Live Testing & Verification Procedure
+## 6. Production Deployment (Oracle Cloud ARM64)
 
-Follow these steps to conduct a live end-to-end verification:
+Complete step-by-step production instructions are detailed in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-1. **Verify Services**:
-   ```powershell
-   ./scripts/verify-phase4.ps1
+### Quick Deployment Summary:
+1. Provision an **Oracle Cloud Always Free Ampere A1 VM** (ARM64, Ubuntu 24.04).
+2. Open ports `80` and `443` in OCI Security Lists and host `iptables`.
+3. Point your DNS A record (e.g. `agent.yourdomain.com`) to the reserved public IP.
+4. Clone the repository and configure `.env.production`.
+5. Run the deployment script:
+   ```bash
+   ./scripts/deploy-oracle.sh
    ```
-2. **Import Workflow**:
-   ```powershell
-   ./scripts/import-workflow.ps1
+6. Access n8n securely via SSH tunnel:
+   ```bash
+   ssh -N -L 5678:localhost:5678 ubuntu@<YOUR_ORACLE_IP>
    ```
-3. **Verify Activation in n8n**:
-   - Open [http://localhost:5678](http://localhost:5678).
-   - Verify that **Phase 4 - Telegram Business Sales Agent** is active.
-4. **Send Test Message**:
-   - From an authorized test Telegram account (`TELEGRAM_ALLOWED_TEST_CHAT_IDS`), send a private DM to the seller's personal Telegram account:
-     > *"Hello, are you open today?"*
-5. **Verify Reply**:
-   - Within 1–2 seconds, the automated reply will arrive in that **same personal DM** from the seller:
-     > *"Hii po! 💗 This is Sash's automated shop assistant. We're currently testing our automatic replies!"*
-6. **Safety Validation**:
-   - Send a message from an unlisted account: verify **no reply** is sent.
-   - Reply as the seller: verify **no reply loop** occurs.
-   - Resend identical update: verify deduplication table catches it.
+   Open `http://localhost:5678` in your workstation browser to configure credentials.
 
 ---
 
-## 6. Known Restrictions & Telegram Business Rules
+## 7. Production Acceptance Matrix
 
-- **24-Hour Reply Window**: Bots connected to a Telegram Business account can reply to private chats within 24 hours of the customer's last message.
-- **Connection Permissions**: The business bot connection must maintain the `can_reply: true` permission.
-- **Outgoing Message Filtering**: In Telegram Business, both incoming customer messages and outgoing seller messages generate `business_message` updates. The `sender_id != TELEGRAM_SELLER_USER_ID` filter prevents recursive message loops.
-- **Ephemeral Tunnels**: For production, an Oracle Cloud VM with a static public IP and standard Let's Encrypt TLS certificate replaces the local Cloudflare Quick Tunnel.
+| Requirement / Test | Verification Type | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **Container & DB Health** | Automated Script | **PASS (Locally Verified)** | Postgres 16 and n8n healthy on persistent volumes |
+| **Admin Route Protection** | Automated Script | **PASS (Locally Verified)** | Reverse proxy strictly blocks `/` with 403 Forbidden |
+| **Catalog Exact Match** | Unit & Integration | **PASS (Locally Verified)** | S.Coups, Mingyu, Wonwoo, Dino items retrieved accurately |
+| **Alias & Typo Match** | Unit & Integration | **PASS (Locally Verified)** | Matches *Cheol*, *Hao*, *Dokyeom*, and spelling variations |
+| **Out-of-Stock Handling** | Unit & Integration | **PASS (Locally Verified)** | Clearly states OOS and suggests in-stock member variants |
+| **Shipping & Packing Math** | Unit & Integration | **PASS (Locally Verified)** | Quotes J&T rates (-₱21 voucher) + tiered packing fee |
+| **Payment Method Grounding** | Unit & Integration | **PASS (Locally Verified)** | Only cites GCash, Maya, MariBank (F. M. A.) with 30% DP |
+| **Automated Disclosure** | Unit & Integration | **PASS (Locally Verified)** | Replies carry `[Automated Response: Shop AI Assistant]` |
+| **Global `/on` and `/off`** | Unit & Integration | **PASS (Locally Verified)** | Global gate rejects messages when `is_enabled=false` |
+| **Per-Chat `/pause`** | Unit & Integration | **PASS (Locally Verified)** | Selective silencing by chat ID |
+| **Human Takeover** | Unit & Integration | **PASS (Locally Verified)** | Seller replying in customer DM auto-pauses AI for that chat |
+| **Atomic Deduplication** | Unit & Integration | **PASS (Locally Verified)** | Re-sent update IDs discarded via PostgreSQL constraint |
+| **Loop Prevention** | Unit & Integration | **PASS (Locally Verified)** | Seller messages dropped to avoid infinite reply loops |
+| **ARM64 Compatibility** | Config Validation | **PASS (Locally Verified)** | All images validated for `linux/arm64` |
+| **Live Telegram DM Reply** | Live Network | **DEFERRED** | Blocked on local ISP; verified via mock fixtures; runs on Oracle |
+| **Live Google Sheets OAuth** | OAuth Flow | **DEFERRED** | Offline PostgreSQL fixture populated; live OAuth ready on Oracle |
 
 ---
 
-## 7. Next Development Phase
+## 8. Troubleshooting & Maintenance
 
-- **Phase 5: Knowledge Base & Inventory Query Engine**:
-  - Connect Google Sheets product catalog, shipping fees, and payment information.
-  - Implement caching in PostgreSQL for instant inventory lookups.
-  - Implement keyword and SKU matching.
+### Logs
+To view container logs:
+```bash
+docker compose logs -f n8n
+docker compose logs -f postgres
+```
+
+### Backups
+Run a manual backup at any time:
+```bash
+./scripts/backup.sh
+# or on Windows:
+./scripts/backup.ps1
+```
+Backups are archived in the `backups/` directory.
+
+### Restoring Backups
+```bash
+./scripts/restore.sh backups/n8n_db_YYYYMMDD_HHMMSS.sql
+# or on Windows:
+./scripts/restore.ps1 -BackupFile backups\n8n_db_YYYYMMDD_HHMMSS.sql
+```

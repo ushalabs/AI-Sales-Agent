@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Local persistent data directories (if any bind mounts are used)
 n8n_data/
@@ -13,6 +14,7 @@ backups/*.tar
 backups/*.tar.gz
 backups/*.dump
 !backups/.gitkeep
+workflows/workflows_*.json
 
 # Operating System files
 .DS_Store
