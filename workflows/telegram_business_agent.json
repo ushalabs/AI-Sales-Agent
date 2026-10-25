@@ -111,6 +111,27 @@
                 ],
                 "combinator": "and"
               }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "rule-cb",
+                    "leftValue": "={{ $json.body.callback_query !== undefined }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
             }
           ]
         }
@@ -288,7 +309,7 @@
             },
             {
               "id": "gate-test-chat",
-              "leftValue": "={{ $env.TELEGRAM_TEST_MODE === 'true' ? ($env.TELEGRAM_ALLOWED_TEST_CHAT_IDS || '').split(',').map(id => id.trim()).includes(String($('Normalize Business Message').item.json.chat_id)) : true }}",
+              "leftValue": "={{ ($env.TELEGRAM_TEST_MODE === 'true' && $env.TELEGRAM_SIMULATOR_MODE !== 'true') ? ($env.TELEGRAM_ALLOWED_TEST_CHAT_IDS || '').split(',').map(id => id.trim()).includes(String($('Normalize Business Message').first().json.chat_id)) : true }}",
               "rightValue": true,
               "operator": { "type": "boolean", "operation": "equals" }
             }
@@ -574,6 +595,16 @@
     },
     {
       "parameters": {
+        "jsCode": "const body = $input.first()?.json?.body || {};\nif (body.callback_query) {\n  return {\n    callback_query_id: body.callback_query.id,\n    callback_data: body.callback_query.data,\n    sender_id: body.callback_query.from?.id,\n    chat_id: body.callback_query.message?.chat?.id,\n    message_id: body.callback_query.message?.message_id\n  };\n} else if (body.message) {\n  return {\n    command: body.message.text || '',\n    sender_id: body.message.from?.id,\n    chat_id: body.message.chat?.id,\n    message_id: body.message.message_id\n  };\n}\nreturn {};"
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000033",
+      "name": "Prepare Owner Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 560]
+    },
+    {
+      "parameters": {
         "workflowId": {
           "__rl": true,
           "value": "GzGhjXdy38xmzByE",
@@ -583,9 +614,12 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "command": "={{ $json.body.message.text }}",
-            "sender_id": "={{ $json.body.message.from.id }}",
-            "chat_id": "={{ $json.body.message.chat.id }}"
+            "command": "={{ $json.command }}",
+            "callback_query_id": "={{ $json.callback_query_id }}",
+            "callback_data": "={{ $json.callback_data }}",
+            "sender_id": "={{ $json.sender_id }}",
+            "chat_id": "={{ $json.chat_id }}",
+            "message_id": "={{ $json.message_id }}"
           }
         }
       },
@@ -593,7 +627,7 @@
       "name": "Execute Owner Control Workflow",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.1,
-      "position": [900, 560]
+      "position": [960, 560]
     }
   ],
   "connections": {
@@ -635,6 +669,24 @@
             "index": 0
           }
         ],
+        [
+          {
+            "node": "Prepare Owner Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Owner Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Owner Input": {
+      "main": [
         [
           {
             "node": "Execute Owner Control Workflow",

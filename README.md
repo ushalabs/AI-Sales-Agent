@@ -45,18 +45,26 @@ flowchart LR
 
 ---
 
-## Owner Control Commands
+## Owner Control Panel & Commands
 
-Manage the agent in real time by messaging the bot from your Telegram account:
+The seller manages the bot directly through a private conversation with `@sashtt_bot`.
 
-| Command | Scope | Description |
+### Native Telegram Inline Keyboard Buttons
+When the seller opens the control panel via `/status`, `/panel`, or `/start`, the bot renders interactive inline buttons:
+- `[ 🟢 Turn ON ]` / `[ 🔴 Turn OFF ]` — Instantly toggle automated customer replies globally.
+- `[ 📊 Refresh Status ]` — Update live control panel status and active catalog metrics.
+- `[ ⏸️ Paused Chats ]` — Review all chats currently paused under human takeover.
+- `[ ▶️ Resume Customer <chat_id> ]` — Dynamic one-click button to resume automated AI replies for specific customers.
+
+### Text Commands & Human Takeover Lifecycle
+| Command / Action | Scope | Description |
 | :--- | :--- | :--- |
-| `/status` | Global | Check agent state (`ON`/`OFF`), active paused chats, and catalog size. |
-| `/on` | Global | Enable automated replies for incoming inquiries. |
-| `/off` | Global | Instantly disable automated replies. |
-| `/pause [chat_id]` | Per-Chat | Mute AI for a specific customer without affecting other chats. |
-| `/resume [chat_id]`| Per-Chat | Unmute AI for a specific customer. |
-| *Manual Typing* | Per-Chat | **Human Takeover**: If the seller sends a manual DM to a customer, AI auto-pauses for that chat. |
+| `/status` / `/panel` | Global | Opens or refreshes the interactive Control Panel with status buttons. |
+| `/on` | Global | Enables automated replies for incoming inquiries. |
+| `/off` | Global | Instantly disables automated replies. |
+| `/pause [chat_id]` | Per-Chat | Mutes AI for a specific customer without affecting other chats. |
+| `/resume [chat_id]`| Per-Chat | Unmutes AI for a specific customer. |
+| *Seller Manual Typing* | Per-Chat | **Human Takeover**: If the seller sends a manual DM to a customer, AI automatically pauses for that chat. The seller can resume the customer at any time via the Control Panel button or `/resume`. |
 
 ---
 

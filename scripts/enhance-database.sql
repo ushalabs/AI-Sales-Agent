@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS telegram_simulated_outbound (
     business_connection_id VARCHAR(100),
     chat_id BIGINT NOT NULL,
     message_text TEXT NOT NULL,
-    status VARCHAR(20) DEFAULT 'CAPTURED',
+    status VARCHAR(50) DEFAULT 'CAPTURED',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

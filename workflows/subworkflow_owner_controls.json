@@ -1,7 +1,7 @@
 {
   "id": "GzGhjXdy38xmzByE",
   "name": "Subworkflow - Owner Controls",
-  "active": false,
+  "active": true,
   "nodes": [
     {
       "parameters": {},
@@ -22,7 +22,7 @@
           "conditions": [
             {
               "id": "owner-auth-check",
-              "leftValue": "={{ String($json.sender_id || $json.body?.message?.from?.id) === String($env.TELEGRAM_SELLER_USER_ID) }}",
+              "leftValue": "={{ String($json.sender_id || $json.body?.message?.from?.id || $json.body?.callback_query?.from?.id) === String($env.TELEGRAM_SELLER_USER_ID) }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -41,10 +41,10 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.first()?.json || {};\nconst text = (item.command || item.body?.message?.text || '').trim();\nconst senderId = item.sender_id || item.body?.message?.from?.id;\nconst chatId = item.chat_id || item.body?.message?.chat?.id;\nconst parts = text.split(/\\s+/);\nconst cmd = parts[0].toLowerCase();\nconst targetChatId = parts[1] ? parts[1].replace(/[^0-9-]/g, '') : null;\n\nlet action = 'UNKNOWN';\nlet query = '';\n\nif (cmd === '/on') {\n  action = 'ENABLE_GLOBAL';\n  query = `UPDATE agent_control_state SET is_enabled = true, updated_by = ${senderId || 0}, updated_at = NOW() WHERE id = 1 RETURNING is_enabled;`;\n} else if (cmd === '/off') {\n  action = 'DISABLE_GLOBAL';\n  query = `UPDATE agent_control_state SET is_enabled = false, updated_by = ${senderId || 0}, updated_at = NOW() WHERE id = 1 RETURNING is_enabled;`;\n} else if (cmd === '/status') {\n  action = 'GET_STATUS';\n  query = `SELECT is_enabled, sleep_mode_enabled, updated_at FROM agent_control_state WHERE id = 1; SELECT chat_id, pause_reason, updated_at FROM chat_conversation_state WHERE is_paused = true;`;\n} else if (cmd === '/pause' && targetChatId) {\n  action = 'PAUSE_CHAT';\n  query = `INSERT INTO chat_conversation_state (chat_id, is_paused, last_message_from, pause_reason, updated_at) VALUES (${targetChatId}, true, 'seller', 'Manual owner pause', NOW()) ON CONFLICT (chat_id) DO UPDATE SET is_paused = true, pause_reason = 'Manual owner pause', updated_at = NOW() RETURNING chat_id;`;\n} else if (cmd === '/resume' && targetChatId) {\n  action = 'RESUME_CHAT';\n  query = `INSERT INTO chat_conversation_state (chat_id, is_paused, last_message_from, pause_reason, updated_at) VALUES (${targetChatId}, false, 'seller', 'Manual owner resume', NOW()) ON CONFLICT (chat_id) DO UPDATE SET is_paused = false, pause_reason = 'Resumed by owner', updated_at = NOW() RETURNING chat_id;`;\n}\n\nreturn {\n  cmd,\n  action,\n  targetChatId,\n  query,\n  chat_id: chatId,\n  sender_id: senderId\n};"
+        "jsCode": "const item = $input.first()?.json || {};\nconst senderId = item.sender_id || item.body?.message?.from?.id || item.body?.callback_query?.from?.id;\nconst chatId = item.chat_id || item.body?.message?.chat?.id || item.body?.callback_query?.message?.chat?.id;\nconst messageId = item.message_id || item.body?.callback_query?.message?.message_id;\nconst callbackQueryId = item.callback_query_id || item.body?.callback_query?.id;\nconst callbackData = item.callback_data || item.body?.callback_query?.data;\nconst textCommand = (item.command || item.body?.message?.text || '').trim();\n\nlet action = 'GET_STATUS';\nlet targetChatId = null;\nlet query = '';\n\nif (callbackData) {\n  if (callbackData === 'cmd_on') {\n    action = 'ENABLE_GLOBAL';\n    query = `UPDATE agent_control_state SET is_enabled = true, updated_by = ${senderId || 0}, updated_at = NOW() WHERE id = 1;`;\n  } else if (callbackData === 'cmd_off') {\n    action = 'DISABLE_GLOBAL';\n    query = `UPDATE agent_control_state SET is_enabled = false, updated_by = ${senderId || 0}, updated_at = NOW() WHERE id = 1;`;\n  } else if (callbackData === 'cmd_status') {\n    action = 'GET_STATUS';\n  } else if (callbackData === 'cmd_paused') {\n    action = 'LIST_PAUSED';\n  } else if (callbackData.startsWith('resume_')) {\n    action = 'RESUME_CHAT';\n    targetChatId = callbackData.replace('resume_', '').replace(/[^0-9-]/g, '');\n    query = `UPDATE chat_conversation_state SET is_paused = false, pause_reason = 'Resumed by owner via panel', updated_at = NOW() WHERE chat_id = ${targetChatId};`;\n  }\n} else if (textCommand) {\n  const parts = textCommand.split(/\\s+/);\n  const cmd = parts[0].toLowerCase();\n  const argId = parts[1] ? parts[1].replace(/[^0-9-]/g, '') : null;\n\n  if (cmd === '/on') {\n    action = 'ENABLE_GLOBAL';\n    query = `UPDATE agent_control_state SET is_enabled = true, updated_by = ${senderId || 0}, updated_at = NOW() WHERE id = 1;`;\n  } else if (cmd === '/off') {\n    action = 'DISABLE_GLOBAL';\n    query = `UPDATE agent_control_state SET is_enabled = false, updated_by = ${senderId || 0}, updated_at = NOW() WHERE id = 1;`;\n  } else if (cmd === '/pause' && argId) {\n    action = 'PAUSE_CHAT';\n    targetChatId = argId;\n    query = `INSERT INTO chat_conversation_state (chat_id, is_paused, last_message_from, pause_reason, updated_at) VALUES (${targetChatId}, true, 'seller', 'Manual owner pause', NOW()) ON CONFLICT (chat_id) DO UPDATE SET is_paused = true, pause_reason = 'Manual owner pause', updated_at = NOW();`;\n  } else if (cmd === '/resume' && argId) {\n    action = 'RESUME_CHAT';\n    targetChatId = argId;\n    query = `INSERT INTO chat_conversation_state (chat_id, is_paused, last_message_from, pause_reason, updated_at) VALUES (${targetChatId}, false, 'seller', 'Resumed by owner', NOW()) ON CONFLICT (chat_id) DO UPDATE SET is_paused = false, pause_reason = 'Resumed by owner', updated_at = NOW();`;\n  } else {\n    action = 'GET_STATUS';\n  }\n}\n\n// Query to execute update and fetch latest state\nlet fullSql = query ? `${query}\\n` : '';\nfullSql += `SELECT is_enabled, sleep_mode_enabled, updated_at FROM agent_control_state WHERE id = 1;\\n`;\nfullSql += `SELECT chat_id, pause_reason, updated_at FROM chat_conversation_state WHERE is_paused = true;`;\n\nreturn {\n  action,\n  targetChatId,\n  senderId,\n  chatId,\n  messageId,\n  callbackQueryId,\n  fullSql\n};"
       },
       "id": "owner-parse-03",
-      "name": "Parse Owner Command",
+      "name": "Parse Owner Command & Action",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [640, 220]
@@ -52,7 +52,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "={{ $json.query }}",
+        "query": "={{ $json.fullSql }}",
         "options": {}
       },
       "id": "owner-db-exec-04",
@@ -69,13 +69,31 @@
     },
     {
       "parameters": {
-        "jsCode": "const cmdInfo = $('Parse Owner Command').first().json;\nconst action = cmdInfo.action;\nconst chat_id = cmdInfo.chat_id;\nlet message = '';\n\nif (action === 'ENABLE_GLOBAL') {\n  message = '✅ [AI Sales Agent]: Automation has been ENABLED globally.\\n\\nThe AI will now automatically process and reply to eligible customer inquiries in your personal Telegram DMs.';\n} else if (action === 'DISABLE_GLOBAL') {\n  message = '🛑 [AI Sales Agent]: Automation has been DISABLED globally.\\n\\nAll automated replies are suspended until explicitly re-enabled via /on.';\n} else if (action === 'PAUSE_CHAT') {\n  message = `⏸️ [Chat Paused]: Customer chat ${cmdInfo.targetChatId} is now PAUSED.\\n\\nThe AI will not respond to this customer until you issue /resume ${cmdInfo.targetChatId}.`;\n} else if (action === 'RESUME_CHAT') {\n  message = `▶️ [Chat Resumed]: Customer chat ${cmdInfo.targetChatId} is now RESUMED.\\n\\nThe AI will handle automated inquiries for this customer again.`;\n} else if (action === 'GET_STATUS') {\n  const results = $input.all().map(i => i.json);\n  const state = results[0] || { is_enabled: false };\n  const statusText = state.is_enabled ? '🟢 ENABLED' : '🔴 DISABLED';\n  message = `📊 [AI Sales Agent Status]\\n• Global Automation: ${statusText}\\n• Timezone: Asia/Manila (PHT, UTC+8)\\n• Last Updated: ${state.updated_at || 'Never'}\\n\\nCommands:\\n/on — Enable AI\\n/off — Disable AI\\n/status — Refresh status\\n/pause <chat_id> — Pause customer\\n/resume <chat_id> — Resume customer`;\n} else {\n  message = '⚠️ Unknown command. Supported commands: /on, /off, /status, /pause <chat_id>, /resume <chat_id>';\n}\n\nreturn {\n  chat_id,\n  reply_text: message\n};"
+        "operation": "executeQuery",
+        "query": "SELECT chat_id, pause_reason FROM chat_conversation_state WHERE is_paused = true;",
+        "options": {}
+      },
+      "id": "owner-db-paused-04b",
+      "name": "Fetch Paused Chats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1060, 220],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const meta = $('Parse Owner Command & Action').first().json;\nconst stateRes = $('Execute Control Query').all().map(i => i.json);\nconst pausedRes = $('Fetch Paused Chats').all().map(i => i.json);\n\nconst agentState = stateRes[0] || { is_enabled: false };\nconst isEnabled = agentState.is_enabled;\nconst pausedChats = pausedRes.filter(p => p.chat_id);\n\nlet statusEmoji = isEnabled ? '🟢 ENABLED' : '🔴 DISABLED';\nlet text = `🤖 <b>AI Sales Agent — Owner Control Panel</b>\\n\\n`;\ntext += `• <b>Global Automation:</b> ${statusEmoji}\\n`;\ntext += `• <b>Timezone:</b> Asia/Manila (PHT, UTC+8)\\n`;\ntext += `• <b>Paused Chats / Human Takeover:</b> ${pausedChats.length > 0 ? `${pausedChats.length} active` : 'None'}\\n`;\n\nif (pausedChats.length > 0) {\n  text += `\\n<b>Paused Customer Chats:</b>\\n`;\n  for (const pc of pausedChats) {\n    text += `  • <code>${pc.chat_id}</code> (${pc.pause_reason || 'Manual takeover'})\\n`;\n  }\n}\n\ntext += `\\n<i>Tap a button below or use backup commands (/on, /off, /status, /pause &lt;id&gt;, /resume &lt;id&gt;).</i>`;\n\n// Construct Native Telegram Inline Keyboard Buttons\nconst keyboard = [\n  [\n    { text: '🟢 Turn ON', callback_data: 'cmd_on' },\n    { text: '🔴 Turn OFF', callback_data: 'cmd_off' }\n  ],\n  [\n    { text: '📊 Refresh Status', callback_data: 'cmd_status' },\n    { text: '⏸️ Paused Chats', callback_data: 'cmd_paused' }\n  ]\n];\n\n// Add one-click Resume buttons for any currently paused customer chats\nfor (const pc of pausedChats.slice(0, 5)) {\n  keyboard.push([\n    { text: `▶️ Resume Customer ${pc.chat_id}`, callback_data: `resume_${pc.chat_id}` }\n  ]);\n}\n\nreturn {\n  chat_id: meta.chatId,\n  message_id: meta.messageId,\n  callback_query_id: meta.callbackQueryId,\n  action: meta.action,\n  reply_text: text,\n  reply_markup: { inline_keyboard: keyboard },\n  is_enabled: isEnabled,\n  paused_count: pausedChats.length\n};"
       },
       "id": "owner-format-05",
-      "name": "Format Control Notification",
+      "name": "Format Control Panel & Buttons",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1080, 220]
+      "position": [1280, 220]
     },
     {
       "parameters": {
@@ -100,19 +118,19 @@
       "name": "Check Owner Simulator Mode",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1300, 220]
+      "position": [1500, 220]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=INSERT INTO telegram_simulated_outbound (business_connection_id, chat_id, message_text, status, created_at)\nVALUES ('owner_control', {{ $json.chat_id || 0 }}, '{{ $json.reply_text.replace(/'/g, \"''\") }}', 'OWNER_COMMAND_CONFIRMED', NOW())\nRETURNING id, chat_id, message_text, status;",
+        "query": "=INSERT INTO telegram_simulated_outbound (business_connection_id, chat_id, message_text, status, created_at)\nVALUES ('owner_control', {{ $json.chat_id || 0 }}, '{{ JSON.stringify({ text: $json.reply_text, reply_markup: $json.reply_markup, callback_query_id: $json.callback_query_id, action: $json.action, is_enabled: $json.is_enabled, paused_count: $json.paused_count }).replace(/'/g, \"''\") }}', 'OWNER_COMMAND_CONFIRMED', NOW())\nRETURNING id, chat_id, message_text, status;",
         "options": {}
       },
       "id": "owner-sim-save-07",
       "name": "Capture Owner Response",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1520, 140],
+      "position": [1720, 140],
       "credentials": {
         "postgres": {
           "id": "postgres-sales-agent",
@@ -127,14 +145,14 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={\n  \"chat_id\": {{ $json.chat_id }},\n  \"text\": {{ JSON.stringify($json.reply_text) }}\n}",
+        "jsonBody": "={\n  \"chat_id\": {{ $json.chat_id }},\n  \"text\": {{ JSON.stringify($json.reply_text) }},\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {{ JSON.stringify($json.reply_markup) }}\n}",
         "options": {}
       },
       "id": "owner-notify-06",
       "name": "Send Owner Response",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1520, 300],
+      "position": [1720, 300],
       "continueOnFail": true
     }
   ],
@@ -154,14 +172,14 @@
       "main": [
         [
           {
-            "node": "Parse Owner Command",
+            "node": "Parse Owner Command & Action",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse Owner Command": {
+    "Parse Owner Command & Action": {
       "main": [
         [
           {
@@ -176,14 +194,25 @@
       "main": [
         [
           {
-            "node": "Format Control Notification",
+            "node": "Fetch Paused Chats",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Format Control Notification": {
+    "Fetch Paused Chats": {
+      "main": [
+        [
+          {
+            "node": "Format Control Panel & Buttons",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Control Panel & Buttons": {
       "main": [
         [
           {
