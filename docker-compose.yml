@@ -41,6 +41,7 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
       - WEBHOOK_URL=${WEBHOOK_URL:-http://127.0.0.1:5678/}
+      - N8N_WEBHOOK_URL=${WEBHOOK_URL:-http://127.0.0.1:5678/}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
 
       # Timezone configuration
@@ -55,12 +56,16 @@ services:
       - EXECUTIONS_DATA_SAVE_ON_SUCCESS=${EXECUTIONS_DATA_SAVE_ON_SUCCESS:-all}
       - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=${EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS:-true}
 
-      # Phase 4: Telegram Business Integration Environment Variables
+      # Telegram Business Configuration
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
       - TELEGRAM_SELLER_USER_ID=${TELEGRAM_SELLER_USER_ID}
       - TELEGRAM_TEST_MODE=${TELEGRAM_TEST_MODE:-false}
       - TELEGRAM_ALLOWED_TEST_CHAT_IDS=${TELEGRAM_ALLOWED_TEST_CHAT_IDS}
+
+      # Gemini AI Configuration
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash-lite}
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:

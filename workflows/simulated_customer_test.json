@@ -1,0 +1,137 @@
+{
+  "name": "Test Harness - Simulated Customer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "simulate-customer",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "sim-webhook-01",
+      "name": "Simulated Customer Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "simulate-customer-webhook"
+    },
+    {
+      "parameters": {
+        "workflowId": "0cGbWSPG0Z14h3So",
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "query": "={{ $json.body.query || 'magkano fml deluxe ni jun?' }}"
+          }
+        }
+      },
+      "id": "sim-call-kr-02",
+      "name": "Execute Knowledge Retrieval",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": "wMZ3vsdPji1oSAr0",
+        "mode": "each",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "query": "={{ $('Simulated Customer Webhook').item.json.body.query }}",
+            "customer_name": "={{ $('Simulated Customer Webhook').item.json.body.customer_name || 'Test Customer' }}",
+            "knowledge": "={{ $json }}"
+          }
+        }
+      },
+      "id": "sim-call-gemini-03",
+      "name": "Execute Gemini Agent",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sim-res-1",
+              "name": "status",
+              "value": "SUCCESS",
+              "type": "string"
+            },
+            {
+              "id": "sim-res-2",
+              "name": "simulated_query",
+              "value": "={{ $('Simulated Customer Webhook').item.json.body.query }}",
+              "type": "string"
+            },
+            {
+              "id": "sim-res-3",
+              "name": "knowledge_match_status",
+              "value": "={{ $('Execute Knowledge Retrieval').item.json.matchStatus }}",
+              "type": "string"
+            },
+            {
+              "id": "sim-res-4",
+              "name": "reply_text",
+              "value": "={{ $json.reply_text }}",
+              "type": "string"
+            },
+            {
+              "id": "sim-res-5",
+              "name": "source",
+              "value": "={{ $json.source }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sim-format-04",
+      "name": "Format Simulation Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [860, 300]
+    }
+  ],
+  "connections": {
+    "Simulated Customer Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute Knowledge Retrieval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Knowledge Retrieval": {
+      "main": [
+        [
+          {
+            "node": "Execute Gemini Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Gemini Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Simulation Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
