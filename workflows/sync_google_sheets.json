@@ -32,7 +32,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "sync-google-sheets",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "sync-trig-webhook",
@@ -41,6 +41,62 @@
       "typeVersion": 2,
       "position": [200, 560],
       "webhookId": "sync-google-sheets-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sync-sec-check-1",
+              "leftValue": "={{ Boolean($env.TELEGRAM_WEBHOOK_SECRET && $json.headers && ($json.headers['x-telegram-bot-api-secret-token'] === $env.TELEGRAM_WEBHOOK_SECRET || $json.headers['x-sync-secret'] === $env.TELEGRAM_WEBHOOK_SECRET)) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "sync-verify-secret",
+      "name": "Verify Sync Webhook Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [420, 560]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"STARTED\",\n  \"message\": \"Knowledge base synchronization initiated\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "sync-resp-200",
+      "name": "Respond 200 OK Sync",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [640, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"Unauthorized\",\n  \"message\": \"Missing or invalid sync secret token\"\n}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "sync-resp-401",
+      "name": "Respond 401 Unauthorized Sync",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [640, 620]
     },
     {
       "parameters": {
@@ -148,7 +204,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const invItems = $('Fetch Product Inventory Sheet').all();\nconst ratesItems = $('Fetch Shipping & Packing Rates Sheet').all();\nconst payItems = $('Fetch Payment Methods Sheet').all();\n\n// Check if any node returned an API error\nconst firstInv = invItems[0]?.json || {};\nconst firstRates = ratesItems[0]?.json || {};\nconst firstPay = payItems[0]?.json || {};\n\nif (firstInv.error || firstRates.error || firstPay.error) {\n  const errMsg = firstInv.error?.message || firstRates.error?.message || firstPay.error?.message || 'Google Sheets API error';\n  return {\n    status: 'FAILED',\n    error: errMsg,\n    productsCount: 0\n  };\n}\n\n// 1. Parse Product Inventory\nlet parsedProducts = [];\nlet deliveryDays = 'Monday–Wednesday only';\nlet idCounter = 1;\n\nfor (const item of invItems) {\n  const row = item.json;\n  const rawMember = String(row['SASH\\'S PRODUCT INVENTORY ♡'] || row['Member'] || row['member'] || '').trim();\n  const rawProd = String(row['col_2'] || row['Product Name'] || row['product_name'] || '').trim();\n  const rawPrice = row['col_3'] !== undefined ? row['col_3'] : (row['Price (₱)'] || row['Price'] || '0');\n  const rawStock = row['col_4'] !== undefined ? row['col_4'] : (row['Stock (pcs)'] || row['Stock'] || '0');\n  const rawNotes = String(row['col_5'] || row['Notes'] || row['notes'] || '').trim();\n\n  if (rawMember.includes('Delivery days:')) {\n    const parts = rawMember.split('Delivery days:');\n    if (parts[1]) deliveryDays = parts[1].trim();\n  }\n\n  if (rawMember && rawProd && rawMember !== 'Member' && !rawMember.includes('PRODUCT INVENTORY')) {\n    const price = parseInt(String(rawPrice).replace(/[^0-9]/g, ''), 10) || 0;\n    const stock = parseInt(String(rawStock).replace(/[^0-9]/g, ''), 10) || 0;\n    const mClean = rawMember.toUpperCase();\n    parsedProducts.push({\n      id: idCounter++,\n      member: mClean,\n      product_name: rawProd,\n      price_php: price,\n      stock,\n      notes: rawNotes,\n      keywords: `${mClean} ${rawProd} ${rawNotes}`.toLowerCase()\n    });\n  }\n}\n\n// 2. Parse Shipping & Packing Rates\nlet courier = 'J&T Express (all rates include a ₱21 voucher)';\nlet shippingRates = [];\nlet packingFees = [];\n\nfor (const item of ratesItems) {\n  const row = item.json;\n  const col1 = String(row['SHIPPING FEE AND PACKING FEE RATES'] || row['LOCATION'] || '').trim().toUpperCase();\n  const col2 = row['col_2'];\n  const col3 = row['col_3'];\n  const col4 = row['col_4'];\n\n  if (col1.includes('MODE OF SHIPMENT:')) {\n    courier = String(row['SHIPPING FEE AND PACKING FEE RATES'] || '').trim();\n  } else if (['LUZON', 'VISAYAS', 'MINDANAO'].includes(col1)) {\n    shippingRates.push({\n      region: col1.charAt(0) + col1.slice(1).toLowerCase(),\n      small: parseInt(col2, 10) || 0,\n      medium: parseInt(col3, 10) || 0,\n      large: parseInt(col4, 10) || 0\n    });\n  } else if (['SMALL', 'MEDIUM', 'LARGE'].includes(col1)) {\n    const price = parseInt(String(col2 || '0').replace(/[^0-9]/g, ''), 10) || 0;\n    packingFees.push({\n      size: col1.charAt(0) + col1.slice(1).toLowerCase(),\n      price_php: price,\n      capacity: String(col3 || '').trim(),\n      inclusions: String(col4 || '').trim()\n    });\n  }\n}\n\n// 3. Parse Payment Methods\nlet paymentDeadline = '1 week from reservation';\nlet downpayment = '30% non-refundable downpayment (nrdp)';\nlet paymentMethods = [];\n\nfor (const item of payItems) {\n  const row = item.json;\n  const col1 = String(row['MODE OF PAYMENT'] || '').trim();\n  const col2 = String(row['col_2'] || '').trim();\n  const col3 = String(row['col_3'] || '').trim();\n\n  if (col1.toLowerCase().includes('deadline')) {\n    paymentDeadline = col1;\n  } else if (col1 && col2) {\n    paymentMethods.push({\n      method_name: col1,\n      account_number: col2,\n      account_name: col3\n    });\n  }\n}\n\n// Validation gate: Reject malformed or empty imports without corrupting existing database\nconst isValid = parsedProducts.length >= 50 && shippingRates.length === 3 && packingFees.length === 3 && paymentMethods.length >= 1;\nif (!isValid) {\n  return {\n    status: 'FAILED',\n    error: `Validation failed: parsed ${parsedProducts.length} products, ${shippingRates.length} shipping regions, ${packingFees.length} packing tiers, ${paymentMethods.length} payment methods.`,\n    productsCount: parsedProducts.length\n  };\n}\n\n// Build transactional SQL\nlet sql = 'BEGIN;\\n';\nsql += 'TRUNCATE TABLE inventory_products, shipping_rates, packing_fees, payment_methods RESTART IDENTITY;\\n';\n\n// Insert Shipping Rates\nfor (const sr of shippingRates) {\n  sql += `INSERT INTO shipping_rates (region, small, medium, large) VALUES ('${sr.region}', ${sr.small}, ${sr.medium}, ${sr.large});\\n`;\n}\n\n// Insert Packing Fees\nfor (const pf of packingFees) {\n  const cap = pf.capacity.replace(/'/g, \"''\");\n  const inc = pf.inclusions.replace(/'/g, \"''\");\n  sql += `INSERT INTO packing_fees (size, price_php, capacity, inclusions) VALUES ('${pf.size}', ${pf.price_php}, '${cap}', '${inc}');\\n`;\n}\n\n// Insert Payment Methods\nfor (const pm of paymentMethods) {\n  const m = pm.method_name.replace(/'/g, \"''\");\n  const num = pm.account_number.replace(/'/g, \"''\");\n  const name = pm.account_name.replace(/'/g, \"''\");\n  sql += `INSERT INTO payment_methods (method_name, account_number, account_name) VALUES ('${m}', '${num}', '${name}');\\n`;\n}\n\n// Insert Shop Policies\nsql += `INSERT INTO shop_policies (policy_key, policy_value) VALUES ('delivery_days', '${deliveryDays.replace(/'/g, \"''\")}') ON CONFLICT (policy_key) DO UPDATE SET policy_value = EXCLUDED.policy_value;\\n`;\nsql += `INSERT INTO shop_policies (policy_key, policy_value) VALUES ('courier', '${courier.replace(/'/g, \"''\")}') ON CONFLICT (policy_key) DO UPDATE SET policy_value = EXCLUDED.policy_value;\\n`;\nsql += `INSERT INTO shop_policies (policy_key, policy_value) VALUES ('payment_deadline', '${paymentDeadline.replace(/'/g, \"''\")}') ON CONFLICT (policy_key) DO UPDATE SET policy_value = EXCLUDED.policy_value;\\n`;\nsql += `INSERT INTO shop_policies (policy_key, policy_value) VALUES ('payment_downpayment', '${downpayment.replace(/'/g, \"''\")}') ON CONFLICT (policy_key) DO UPDATE SET policy_value = EXCLUDED.policy_value;\\n`;\n\n// Insert Products\nfor (const p of parsedProducts) {\n  const m = p.member.replace(/'/g, \"''\");\n  const pn = p.product_name.replace(/'/g, \"''\");\n  const n = p.notes.replace(/'/g, \"''\");\n  const kw = p.keywords.replace(/'/g, \"''\");\n  sql += `INSERT INTO inventory_products (id, member, product_name, price_php, stock, notes, keywords) VALUES (${p.id}, '${m}', '${pn}', ${p.price_php}, ${p.stock}, '${n}', '${kw}');\\n`;\n}\n\n// Record successful sync history\nsql += `INSERT INTO sync_history (sync_type, status, products_synced, error_message, synced_at) VALUES ('GOOGLE_SHEETS', 'SUCCESS', ${parsedProducts.length}, NULL, NOW());\\n`;\nsql += 'COMMIT;';\n\nreturn {\n  status: 'SUCCESS',\n  productsCount: parsedProducts.length,\n  shippingCount: shippingRates.length,\n  packingCount: packingFees.length,\n  paymentCount: paymentMethods.length,\n  sqlTransaction: sql\n};"
+        "jsCode": "const invItems = $('Fetch Product Inventory Sheet').all();\nconst ratesItems = $('Fetch Shipping & Packing Rates Sheet').all();\nconst payItems = $('Fetch Payment Methods Sheet').all();\n\n// Check if simulation failure header or parameter was passed\nlet simulateFailure = false;\ntry {\n  const trigItems = $('Webhook Trigger').all();\n  if (trigItems.length > 0 && trigItems[0]?.json?.headers && (trigItems[0].json.headers['x-simulate-failure'] === 'true' || trigItems[0].json.body?.simulate_failure === true)) {\n    simulateFailure = true;\n  }\n} catch (e) {}\n\n// Check if any node returned an API error\nconst firstInv = invItems[0]?.json || {};\nconst firstRates = ratesItems[0]?.json || {};\nconst firstPay = payItems[0]?.json || {};\n\nif (firstInv.error || firstRates.error || firstPay.error || simulateFailure) {\n  const errMsg = simulateFailure ? 'Simulated Google Sheets API network timeout / invalid sheet format' : (firstInv.error?.message || firstRates.error?.message || firstPay.error?.message || 'Google Sheets API error');\n  return {\n    status: 'FAILED',\n    error: errMsg,\n    productsCount: 0\n  };\n}\n\n// 1. Parse Product Inventory\nlet parsedProducts = [];\nlet deliveryDays = 'Monday–Wednesday only';\nlet idCounter = 1;\n\nfor (const item of invItems) {\n  const row = item.json;\n  const rawMember = String(row['SASH\\'S PRODUCT INVENTORY ♡'] || row['Member'] || row['member'] || '').trim();\n  const rawProd = String(row['col_2'] || row['Product Name'] || row['product_name'] || '').trim();\n  const rawPrice = row['col_3'] !== undefined ? row['col_3'] : (row['Price (₱)'] || row['Price'] || '0');\n  const rawStock = row['col_4'] !== undefined ? row['col_4'] : (row['Stock (pcs)'] || row['Stock'] || '0');\n  const rawNotes = String(row['col_5'] || row['Notes'] || row['notes'] || '').trim();\n\n  if (rawMember.includes('Delivery days:')) {\n    const parts = rawMember.split('Delivery days:');\n    if (parts[1]) deliveryDays = parts[1].trim();\n  }\n\n  if (rawMember && rawProd && rawMember !== 'Member' && !rawMember.includes('PRODUCT INVENTORY')) {\n    const price = parseInt(String(rawPrice).replace(/[^0-9]/g, ''), 10) || 0;\n    const stock = parseInt(String(rawStock).replace(/[^0-9]/g, ''), 10) || 0;\n    const mClean = rawMember.toUpperCase();\n    parsedProducts.push({\n      id: idCounter++,\n      member: mClean,\n      product_name: rawProd,\n      price_php: price,\n      stock,\n      notes: rawNotes,\n      keywords: `${mClean} ${rawProd} ${rawNotes}`.toLowerCase()\n    });\n  }\n}\n\n// 2. Parse Shipping & Packing Rates\nlet courier = 'J&T Express (all rates include a ₱21 voucher)';\nlet shippingRates = [];\nlet packingFees = [];\n\nfor (const item of ratesItems) {\n  const row = item.json;\n  const col1 = String(row['SHIPPING FEE AND PACKING FEE RATES'] || row['LOCATION'] || '').trim().toUpperCase();\n  const col2 = row['col_2'];\n  const col3 = row['col_3'];\n  const col4 = row['col_4'];\n\n  if (col1.includes('MODE OF SHIPMENT:')) {\n    courier = String(row['SHIPPING FEE AND PACKING FEE RATES'] || '').trim();\n  } else if (['LUZON', 'VISAYAS', 'MINDANAO'].includes(col1)) {\n    shippingRates.push({\n      region: col1.charAt(0) + col1.slice(1).toLowerCase(),\n      small: parseInt(col2, 10) || 0,\n      medium: parseInt(col3, 10) || 0,\n      large: parseInt(col4, 10) || 0\n    });\n  } else if (['SMALL', 'MEDIUM', 'LARGE'].includes(col1)) {\n    const price = parseInt(String(col2 || '0').replace(/[^0-9]/g, ''), 10) || 0;\n    packingFees.push({\n      size: col1.charAt(0) + col1.slice(1).toLowerCase(),\n      price_php: price,\n      capacity: String(col3 || '').trim(),\n      inclusions: String(col4 || '').trim()\n    });\n  }\n}\n\n// 3. Parse Payment Methods\nlet paymentDeadline = '1 week from reservation';\nlet downpayment = '30% non-refundable downpayment (nrdp)';\nlet paymentMethods = [];\n\nfor (const item of payItems) {\n  const row = item.json;\n  const col1 = String(row['MODE OF PAYMENT'] || '').trim();\n  const col2 = String(row['col_2'] || '').trim();\n  const col3 = String(row['col_3'] || '').trim();\n\n  if (col1.toLowerCase().includes('deadline')) {\n    paymentDeadline = col1;\n  } else if (col1 && col2) {\n    paymentMethods.push({\n      method_name: col1,\n      account_number: col2,\n      account_name: col3\n    });\n  }\n}\n\n// Validation gate: Reject malformed or empty imports without corrupting existing database\nconst isValid = parsedProducts.length >= 50 && shippingRates.length === 3 && packingFees.length === 3 && paymentMethods.length >= 1;\nif (!isValid) {\n  return {\n    status: 'FAILED',\n    error: `Validation failed: parsed ${parsedProducts.length} products, ${shippingRates.length} shipping regions, ${packingFees.length} packing tiers, ${paymentMethods.length} payment methods.`,\n    productsCount: parsedProducts.length\n  };\n}\n\n// Build transactional SQL\nlet sql = 'BEGIN;\\n';\nsql += 'TRUNCATE TABLE inventory_products, shipping_rates, packing_fees, payment_methods RESTART IDENTITY;\\n';\n\n// Insert Shipping Rates\nfor (const sr of shippingRates) {\n  sql += `INSERT INTO shipping_rates (region, small, medium, large) VALUES ('${sr.region}', ${sr.small}, ${sr.medium}, ${sr.large});\\n`;\n}\n\n// Insert Packing Fees\nfor (const pf of packingFees) {\n  const cap = pf.capacity.replace(/'/g, \"''\");\n  const inc = pf.inclusions.replace(/'/g, \"''\");\n  sql += `INSERT INTO packing_fees (size, price_php, capacity, inclusions) VALUES ('${pf.size}', ${pf.price_php}, '${cap}', '${inc}');\\n`;\n}\n\n// Insert Payment Methods\nfor (const pm of paymentMethods) {\n  const m = pm.method_name.replace(/'/g, \"''\");\n  const num = pm.account_number.replace(/'/g, \"''\");\n  const name = pm.account_name.replace(/'/g, \"''\");\n  sql += `INSERT INTO payment_methods (method_name, account_number, account_name) VALUES ('${m}', '${num}', '${name}');\\n`;\n}\n\n// Insert Shop Policies\nsql += `INSERT INTO shop_policies (policy_key, policy_value) VALUES ('delivery_days', '${deliveryDays.replace(/'/g, \"''\")}') ON CONFLICT (policy_key) DO UPDATE SET policy_value = EXCLUDED.policy_value;\\n`;\nsql += `INSERT INTO shop_policies (policy_key, policy_value) VALUES ('courier', '${courier.replace(/'/g, \"''\")}') ON CONFLICT (policy_key) DO UPDATE SET policy_value = EXCLUDED.policy_value;\\n`;\nsql += `INSERT INTO shop_policies (policy_key, policy_value) VALUES ('payment_deadline', '${paymentDeadline.replace(/'/g, \"''\")}') ON CONFLICT (policy_key) DO UPDATE SET policy_value = EXCLUDED.policy_value;\\n`;\nsql += `INSERT INTO shop_policies (policy_key, policy_value) VALUES ('payment_downpayment', '${downpayment.replace(/'/g, \"''\")}') ON CONFLICT (policy_key) DO UPDATE SET policy_value = EXCLUDED.policy_value;\\n`;\n\n// Insert Products\nfor (const p of parsedProducts) {\n  const m = p.member.replace(/'/g, \"''\");\n  const pn = p.product_name.replace(/'/g, \"''\");\n  const n = p.notes.replace(/'/g, \"''\");\n  const kw = p.keywords.replace(/'/g, \"''\");\n  sql += `INSERT INTO inventory_products (id, member, product_name, price_php, stock, notes, keywords) VALUES (${p.id}, '${m}', '${pn}', ${p.price_php}, ${p.stock}, '${n}', '${kw}');\\n`;\n}\n\n// Record successful sync history\nsql += `INSERT INTO sync_history (sync_type, status, products_synced, error_message, synced_at) VALUES ('GOOGLE_SHEETS', 'SUCCESS', ${parsedProducts.length}, NULL, NOW());\\n`;\nsql += 'COMMIT;';\n\nreturn {\n  status: 'SUCCESS',\n  productsCount: parsedProducts.length,\n  shippingCount: shippingRates.length,\n  packingCount: packingFees.length,\n  paymentCount: paymentMethods.length,\n  sqlTransaction: sql\n};"
       },
       "id": "sync-process-data",
       "name": "Parse & Validate Sheets Data",
@@ -245,6 +301,35 @@
       ]
     },
     "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Verify Sync Webhook Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Sync Webhook Secret": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 OK Sync",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 Unauthorized Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200 OK Sync": {
       "main": [
         [
           {

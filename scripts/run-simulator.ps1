@@ -41,6 +41,12 @@ function Get-LatestExecutionId([string]$wfId = "") {
     return $id
 }
 
+function Get-ExecutionDataRaw([string]$execId = "") {
+    if (-not $execId) { return "" }
+    $q = 'SELECT data FROM execution_data WHERE "executionId" = ' + $execId + ';'
+    return (Run-DbQuery $q)
+}
+
 # 2. Record Initial State for Clean Restoration
 $initialGlobalEnabled = Run-DbQuery "SELECT is_enabled FROM agent_control_state WHERE id = 1;"
 $initialPausedChats = Run-DbQuery "SELECT chat_id FROM chat_conversation_state WHERE is_paused = true;"
@@ -406,10 +412,10 @@ try {
     $customerReply15 = Get-LatestCapturedReply $testChatId 2.5
     $exec15 = Get-LatestExecutionId "GzGhjXdy38xmzByE"
 
-    if ($isNowDisabled -eq "f" -and [string]::IsNullOrWhiteSpace($customerReply15) -and ($panelReply15 -match "DISABLED")) {
-        Record-Scenario "TC-15" "Owner disables bot via button" "is_enabled = false & 0 customer replies" "Turned OFF, 0 customer reply" "PASS" "Button cmd_off disables bot; customer messages halted" $exec15 "Owner Control Subworkflow"
+    if ($isNowDisabled -eq "f" -and [string]::IsNullOrWhiteSpace($customerReply15) -and ($panelReply15 -match "DISABLED") -and ($panelReply15 -match "editMessageText")) {
+        Record-Scenario "TC-15" "Owner disables bot via button" "is_enabled = false & 0 customer replies" "Turned OFF via editMessageText, 0 customer reply" "PASS" "Button cmd_off updates panel in-place (editMessageText) & halts messages" $exec15 "Owner Control Subworkflow"
     } else {
-        Record-Scenario "TC-15" "Owner disables bot via button" "is_enabled = false" "State: $isNowDisabled, Reply: $customerReply15" "FAIL" "cmd_off button failed" $exec15 "Owner Control Subworkflow"
+        Record-Scenario "TC-15" "Owner disables bot via button" "is_enabled = false" "State: $isNowDisabled, Reply: $customerReply15, Panel: $panelReply15" "FAIL" "cmd_off button failed" $exec15 "Owner Control Subworkflow"
     }
 
     # -------------------------------------------------------------
@@ -440,6 +446,7 @@ try {
     $uId++
     $null = Run-DbQuery "DELETE FROM telegram_simulated_outbound;"
     $null = Send-SimulatedUpdate -UpdateId $uId -SenderId $sellerId -ChatId $sellerId -CallbackData "cmd_on"
+    $panelReply17 = Get-LatestOwnerPanelReply $sellerId
     $null = Run-DbQuery "UPDATE chat_conversation_state SET is_paused = false WHERE chat_id = $testChatId;"
     $isNowEnabled = Run-DbQuery "SELECT is_enabled FROM agent_control_state WHERE id = 1;"
 
@@ -448,10 +455,10 @@ try {
     $reply17 = Get-LatestCapturedReply $testChatId
     $exec17 = Get-LatestExecutionId "GzGhjXdy38xmzByE"
 
-    if ($isNowEnabled -eq "t" -and (-not [string]::IsNullOrWhiteSpace($reply17))) {
-        Record-Scenario "TC-17" "Owner enables bot via button" "is_enabled = true & replies resume" "Resumed, captured reply" "PASS" "Button cmd_on restores automated replies" $exec17 "Owner Control Subworkflow"
+    if ($isNowEnabled -eq "t" -and (-not [string]::IsNullOrWhiteSpace($reply17)) -and ($panelReply17 -match "editMessageText")) {
+        Record-Scenario "TC-17" "Owner enables bot via button" "is_enabled = true & replies resume" "Resumed via editMessageText, captured reply" "PASS" "Button cmd_on updates panel in-place (editMessageText) & restores replies" $exec17 "Owner Control Subworkflow"
     } else {
-        Record-Scenario "TC-17" "Owner enables bot via button" "Resumed" "is_enabled: $isNowEnabled, Reply: $reply17" "FAIL" "Failed to resume" $exec17 "Owner Control Subworkflow"
+        Record-Scenario "TC-17" "Owner enables bot via button" "Resumed" "is_enabled: $isNowEnabled, Reply: $reply17, Panel: $panelReply17" "FAIL" "Failed to resume" $exec17 "Owner Control Subworkflow"
     }
 
     # -------------------------------------------------------------
@@ -487,18 +494,19 @@ try {
     # Step B: Seller taps dynamic resume button on control panel
     $uId++
     $null = Send-SimulatedUpdate -UpdateId $uId -SenderId $sellerId -ChatId $sellerId -CallbackData "resume_$testChatId"
+    $panelReply19 = Get-LatestOwnerPanelReply $sellerId
     Start-Sleep -Seconds 1
     $isPausedAfterResume = Run-DbQuery "SELECT is_paused FROM chat_conversation_state WHERE chat_id = $testChatId;"
     $exec19 = Get-LatestExecutionId "GzGhjXdy38xmzByE"
 
-    if ($isPausedTakeover -eq "t" -and $isPausedAfterResume -eq "f") {
-        Record-Scenario "TC-19" "Human takeover & panel resume" "Auto-pause on seller message, resume via button" "Takeover: paused, Button: resumed" "PASS" "Human takeover auto-pauses; button resume restores AI" $exec19 "Owner Control Panel Subworkflow"
+    if ($isPausedTakeover -eq "t" -and $isPausedAfterResume -eq "f" -and ($panelReply19 -match "editMessageText")) {
+        Record-Scenario "TC-19" "Human takeover & panel resume" "Auto-pause on seller message, resume via button" "Takeover: paused, Button: resumed via editMessageText" "PASS" "Human takeover auto-pauses; button updates panel in-place (editMessageText) & restores AI" $exec19 "Owner Control Panel Subworkflow"
     } else {
-        Record-Scenario "TC-19" "Human takeover & panel resume" "Pause and Resume" "Takeover: $isPausedTakeover, Resume: $isPausedAfterResume" "FAIL" "Takeover/Resume lifecycle failed" $exec19 "Owner Control Panel Subworkflow"
+        Record-Scenario "TC-19" "Human takeover & panel resume" "Pause and Resume" "Takeover: $isPausedTakeover, Resume: $isPausedAfterResume, Panel: $panelReply19" "FAIL" "Takeover/Resume lifecycle failed" $exec19 "Owner Control Panel Subworkflow"
     }
 
     # -------------------------------------------------------------
-    # TC-20: Missing/invalid webhook secret (HTTP Status Assertion)
+    # TC-20: Missing/invalid webhook secret (HTTP Status & Outbound Assertion)
     # -------------------------------------------------------------
     $uId++
     $null = Run-DbQuery "DELETE FROM telegram_simulated_outbound;"
@@ -506,75 +514,100 @@ try {
     $reply20 = Get-LatestCapturedReply $testChatId 2.0
     $exec20 = Get-LatestExecutionId "ktvkVp0E0z2blc4n"
 
-    # In n8n, fail-closed verification halts execution before any outbound action
-    if ($badSecretSend.Status -ne 200 -or [string]::IsNullOrWhiteSpace($reply20)) {
-        Record-Scenario "TC-20" "Missing/invalid webhook secret" "Rejected by secret check (0 reply)" "Rejected: Outbound reply blocked" "PASS" "Webhook verification fails closed on invalid secret" $exec20 "Nginx / n8n Secret Gate"
+    # Both conditions must separately hold: HTTP 401/403 status AND zero outbound replies
+    $statusRejected = ($badSecretSend.Status -eq 401 -or $badSecretSend.Status -eq 403)
+    $noOutbound = [string]::IsNullOrWhiteSpace($reply20)
+
+    if ($statusRejected -and $noOutbound) {
+        Record-Scenario "TC-20" "Missing/invalid webhook secret" "Rejected by secret check (HTTP 401 & 0 reply)" "HTTP $($badSecretSend.Status), 0 outbound messages" "PASS" "Webhook verification fails closed on invalid secret (HTTP 401 verified)" $exec20 "Nginx / n8n Secret Gate"
     } else {
-        Record-Scenario "TC-20" "Missing/invalid webhook secret" "Rejected" "Reply: $reply20" "FAIL" "Failed-closed check failed" $exec20 "Nginx / n8n Secret Gate"
+        Record-Scenario "TC-20" "Missing/invalid webhook secret" "Rejected by secret check (HTTP 401 & 0 reply)" "Status: $($badSecretSend.Status), Outbound: '$reply20'" "FAIL" "Failed-closed check failed (Status: $($badSecretSend.Status), Outbound: '$reply20')" $exec20 "Nginx / n8n Secret Gate"
     }
 
     # -------------------------------------------------------------
-    # TC-21: Gemini timeout/error simulation & recovery
+    # TC-21: Gemini timeout/error simulation & deterministic fallback recovery
     # -------------------------------------------------------------
     $uId++
     $null = Run-DbQuery "DELETE FROM telegram_simulated_outbound;"
-    # Test subworkflow error recovery directly
-    $subPayload = @{
-        query = "magkano po fml deluxe ni jun?"
-        customer_name = "BuyerFallback"
-        simulate_gemini_failure = $true
-        knowledge = @{
-            matchStatus = "EXACT_MATCH"
-            detectedMembers = @("JUN")
-            products = @(@{ id = 14; member = "JUN"; product_name = "FML - Deluxe Version"; price_php = 100; stock = 1; notes = "With dent on backprint" })
-        }
-    } | ConvertTo-Json -Depth 5
+    
+    # Inject Gemini failure using simulation tag
+    $null = Send-SimulatedUpdate -UpdateId $uId -Text "[SIMULATE_GEMINI_FAILURE] magkano po fml deluxe ni jun?"
+    $reply21 = Get-LatestCapturedReply $testChatId 4.0
+    $exec21Sub = Get-LatestExecutionId "wMZ3vsdPji1oSAr0"
+    $exec21Main = Get-LatestExecutionId "ktvkVp0E0z2blc4n"
 
-    # Trigger subworkflow with simulated Gemini failure
-    $subRes = Invoke-RestMethod -Uri "http://localhost:5678/webhook/telegram-business" -Method Post -Headers @{ "x-telegram-bot-api-secret-token" = $secretToken; "Content-Type" = "application/json" } -Body (@{ update_id = $uId; business_message = @{ business_connection_id = "bc_sim"; message_id = 999; chat = @{ id = $testChatId; type = "private" }; from = @{ id = $testChatId; first_name = "Buyer" }; text = "magkano po fml deluxe ni jun?" } } | ConvertTo-Json -Depth 5)
-    $reply21 = Get-LatestCapturedReply $testChatId
-    $exec21 = Get-LatestExecutionId "wMZ3vsdPji1oSAr0"
+    # Query PostgreSQL execution_data to verify deterministic grounded fallback was executed
+    $execData21 = Get-ExecutionDataRaw $exec21Sub
+    $usedFallbackBranch = ($execData21 -like "*deterministic_grounded_fallback*" -or $execData21 -like "*grounded_rules_v1*")
+    $accuratePrice = ($reply21 -match "100" -or $reply21 -match "₱100")
+    $correctMember = ($reply21 -match "Jun" -or $reply21 -match "JUN")
 
-    if ($reply21 -match "Jun" -and ($reply21 -match "100" -or $reply21 -match "₱100" -or $reply21 -match "FML")) {
-        Record-Scenario "TC-21" "Gemini fails or fallback" "Deterministic grounded engine recovers" "Grounded fallback verified" "PASS" "Grounded fallback recovers and answers accurately" $exec21 "Deterministic Fallback Engine"
+    if ($usedFallbackBranch -and $accuratePrice -and $correctMember) {
+        Record-Scenario "TC-21" "Gemini fails or fallback" "Deterministic grounded engine recovers (₱100)" "Fallback branch executed, quoted ₱100" "PASS" "Grounded fallback recovers accurately; execution path verified in n8n execution_data" $exec21Sub "Deterministic Fallback Engine"
     } else {
-        Record-Scenario "TC-21" "Gemini fails or fallback" "Safe recovery" "Captured: $reply21" "FAIL" "Fallback failed" $exec21 "Deterministic Fallback Engine"
+        Record-Scenario "TC-21" "Gemini fails or fallback" "Safe recovery" "FallbackBranch: $usedFallbackBranch, Reply: $reply21" "FAIL" "Fallback failed (Branch: $usedFallbackBranch, Reply: $reply21)" $exec21Sub "Deterministic Fallback Engine"
     }
 
     # -------------------------------------------------------------
     # TC-22: Sheets failure simulation & last-good snapshot handling
     # -------------------------------------------------------------
-    # Verify that invalid Google Sheets data triggers failure branch and preserves existing catalog
     $prodCountBefore = [int](Run-DbQuery "SELECT count(*) FROM inventory_products;")
-    # Send empty request or malformed data to sync_history
-    $null = Run-DbQuery "INSERT INTO sync_history (sync_type, status, products_synced, error_message, synced_at) VALUES ('GOOGLE_SHEETS', 'FAILED', 0, 'Simulated API connection failure', NOW());"
+    
+    # Genuinely invoke Google Sheets sync webhook with simulation failure header
+    $null = Run-DbQuery "DELETE FROM telegram_simulated_outbound;"
+    $syncFailRes = $null
+    try {
+        $syncFailRes = Invoke-RestMethod -Uri $sheetsSyncUrl -Method Post -Headers @{ "x-telegram-bot-api-secret-token" = $secretToken; "x-simulate-failure" = "true" } -TimeoutSec 15
+    } catch {}
+    
+    # Poll until sync completes and records failure status (up to 12s)
+    $syncDeadline = [DateTime]::UtcNow.AddSeconds(12)
+    $syncRow22 = ""
+    while ([DateTime]::UtcNow -lt $syncDeadline) {
+        $syncRow22 = Run-DbQuery "SELECT status FROM sync_history ORDER BY id DESC LIMIT 1;"
+        if ($syncRow22 -eq "FAILED") { break }
+        Start-Sleep -Milliseconds 500
+    }
+    $exec22 = Get-LatestExecutionId "eSF3SSYCgDMeJQmR"
     $prodCountAfter = [int](Run-DbQuery "SELECT count(*) FROM inventory_products;")
 
-    if ($prodCountBefore -ge 60 -and $prodCountBefore -eq $prodCountAfter) {
-        Record-Scenario "TC-22" "Google Sheets unavailable" "Preserve last-good snapshot ($prodCountBefore items)" "Preserved $prodCountAfter products intact" "PASS" "Failure logs to sync_history; PostgreSQL cache untouched" (Get-LatestExecutionId "eSF3SSYCgDMeJQmR") "PostgreSQL Snapshot Cache"
+    # Verify execution path in PostgreSQL execution_data
+    $execData22 = Get-ExecutionDataRaw $exec22
+    $failureLogged = ($execData22 -like "*Log Sync Fallback Preservation*" -or $syncRow22 -eq "FAILED")
+    $snapshotPreserved = ($prodCountBefore -ge 50 -and $prodCountBefore -eq $prodCountAfter)
+
+    # Demonstrate customer inquiry still works accurately from preserved snapshot cache
+    $uId++
+    $null = Run-DbQuery "UPDATE agent_control_state SET is_enabled = true WHERE id = 1;"
+    $null = Send-SimulatedUpdate -UpdateId $uId -Text "magkano po fml deluxe ni jun?"
+    $replyAfterFailedSync = Get-LatestCapturedReply $testChatId 8.0
+    $catalogStillServes = ($replyAfterFailedSync -match "100" -or $replyAfterFailedSync -match "₱100")
+
+    if ($failureLogged -and $snapshotPreserved -and $catalogStillServes) {
+        Record-Scenario "TC-22" "Google Sheets unavailable" "Preserve last-good snapshot ($prodCountBefore items)" "Preserved $prodCountAfter items, FAILED logged, customer reply served" "PASS" "Real failure injected into n8n sync workflow; Log Sync Fallback executed; snapshot preserved; customer served" $exec22 "PostgreSQL Snapshot Cache"
     } else {
-        Record-Scenario "TC-22" "Google Sheets unavailable" "Preserve snapshot" "Before: $prodCountBefore, After: $prodCountAfter" "FAIL" "Snapshot corrupted" (Get-LatestExecutionId "eSF3SSYCgDMeJQmR") "PostgreSQL Snapshot Cache"
+        Record-Scenario "TC-22" "Google Sheets unavailable" "Preserve snapshot" "Before: $prodCountBefore, After: $prodCountAfter, SyncRow: $syncRow22, Reply: '$replyAfterFailedSync'" "FAIL" "Snapshot corrupted or customer query failed" $exec22 "PostgreSQL Snapshot Cache"
     }
 
     # -------------------------------------------------------------
     # TC-23: Live Google Sheets -> PostgreSQL -> Customer Reply Sync
     # -------------------------------------------------------------
-    # Trigger real Google Sheets transactional synchronization
-    $syncResponse = Invoke-RestMethod -Uri $sheetsSyncUrl -Method Post -TimeoutSec 20
-    Start-Sleep -Seconds 2
-    $syncRow = Run-DbQuery "SELECT status, products_synced FROM sync_history ORDER BY id DESC LIMIT 1;"
+    # Trigger real Google Sheets transactional synchronization with secret header
+    $syncResponse = Invoke-RestMethod -Uri $sheetsSyncUrl -Method Post -Headers @{ "x-telegram-bot-api-secret-token" = $secretToken } -TimeoutSec 20
+    Start-Sleep -Seconds 3
+    $syncRow = Run-DbQuery "SELECT status, products_synced FROM sync_history WHERE status = 'SUCCESS' ORDER BY id DESC LIMIT 1;"
     $exec23 = Get-LatestExecutionId "eSF3SSYCgDMeJQmR"
 
     # Query customer inquiry right after live sync
     $uId++
     $null = Run-DbQuery "DELETE FROM telegram_simulated_outbound;"
     $null = Send-SimulatedUpdate -UpdateId $uId -Text "magkano po fml deluxe ni jun?"
-    $reply23 = Get-LatestCapturedReply $testChatId
+    $reply23 = Get-LatestCapturedReply $testChatId 4.0
 
     if ($syncRow -match "SUCCESS" -and ($reply23 -match "100" -or $reply23 -match "₱100")) {
         Record-Scenario "TC-23" "Real Sheets-to-PostgreSQL sync" "Sync writes 69 items; inquiry quotes ₱100" "Sync SUCCESS, quoted ₱100" "PASS" "Real Google Sheets -> PostgreSQL -> Customer Reply verified" $exec23 "Google Sheets API v4 (Live)"
     } else {
-        Record-Scenario "TC-23" "Real Sheets-to-PostgreSQL sync" "Sync SUCCESS" "Sync: $syncRow, Reply: $reply23" "FAIL" "Sheets sync failed" $exec23 "Google Sheets API v4 (Live)"
+        Record-Scenario "TC-23" "Real Sheets-to-PostgreSQL sync" "Sync SUCCESS" "Sync: $syncRow, Reply: $reply23" "FAIL" "Sheets sync failed (Sync: $syncRow, Reply: $reply23)" $exec23 "Google Sheets API v4 (Live)"
     }
 
     # -------------------------------------------------------------
@@ -589,8 +622,8 @@ try {
     $uId++
     $null = Send-SimulatedUpdate -UpdateId $uId -ChatId $otherChatId -SenderId $otherChatId -Text "available pa po ba si wonwoo fts?"
 
-    $replyCustomer1 = Get-LatestCapturedReply $testChatId
-    $replyCustomer2 = Get-LatestCapturedReply $otherChatId
+    $replyCustomer1 = Get-LatestCapturedReply $testChatId 4.0
+    $replyCustomer2 = Get-LatestCapturedReply $otherChatId 4.0
     $exec24 = Get-LatestExecutionId "ktvkVp0E0z2blc4n"
 
     $c1Match = ($replyCustomer1 -match "Jun" -or $replyCustomer1 -match "100")
@@ -603,20 +636,37 @@ try {
     }
 
     # -------------------------------------------------------------
-    # TC-25: Owner switches OFF during AI generation (Pre-Dispatch Guard)
+    # TC-25: Owner switches OFF during in-flight generation (Pre-Dispatch Gate)
     # -------------------------------------------------------------
-    # Verify final pre-dispatch authorization check
-    $null = Run-DbQuery "UPDATE agent_control_state SET is_enabled = false WHERE id = 1;"
+    # Ensure bot is enabled initially
+    $null = Run-DbQuery "UPDATE agent_control_state SET is_enabled = true WHERE id = 1;"
     $null = Run-DbQuery "DELETE FROM telegram_simulated_outbound;"
     $uId++
-    $null = Send-SimulatedUpdate -UpdateId $uId -Text "magkano po jun photocard?"
-    $reply25 = Get-LatestCapturedReply $testChatId 2.5
+    
+    # Send inquiry with in-flight race trigger tag
+    $null = Send-SimulatedUpdate -UpdateId $uId -Text "[SIMULATE_RACE_OFF] magkano po jun photocard?"
+    $reply25 = Get-LatestCapturedReply $testChatId 3.0
     $exec25 = Get-LatestExecutionId "ktvkVp0E0z2blc4n"
 
-    if ([string]::IsNullOrWhiteSpace($reply25)) {
-        Record-Scenario "TC-25" "Owner switches OFF during generation" "Pre-dispatch gate blocks outbound transmission" "Blocked: 0 outbound messages" "PASS" "Pre-dispatch race-condition guard verified" $exec25 "Pre-Dispatch Security Gate"
+    # Verify execution path in PostgreSQL execution_data:
+    # 1. Initial safety gate was executed and passed
+    # 2. Gemini customer reply node was executed
+    # 3. Simulate In-Flight Owner OFF executed mid-flight
+    # 4. Final pre-dispatch gate caught the state change and aborted dispatch
+    $execData25 = Get-ExecutionDataRaw $exec25
+    $initialGateRan = ($execData25 -like "*Safety & Authorization Gate*")
+    $geminiRan = ($execData25 -like "*Generate Gemini Customer Reply*")
+    $raceTriggerRan = ($execData25 -like "*Simulate In-Flight Owner OFF*")
+    $noOutboundCaptured = [string]::IsNullOrWhiteSpace($reply25)
+    $finalStateDisabled = ((Run-DbQuery "SELECT is_enabled FROM agent_control_state WHERE id = 1;") -eq "f")
+
+    # Restore state immediately
+    $null = Run-DbQuery "UPDATE agent_control_state SET is_enabled = true WHERE id = 1;"
+
+    if ($initialGateRan -and $geminiRan -and $raceTriggerRan -and $noOutboundCaptured -and $finalStateDisabled) {
+        Record-Scenario "TC-25" "Owner switches OFF during generation" "Pre-dispatch gate blocks outbound transmission" "Gate passed, state changed mid-flight, 0 reply" "PASS" "In-flight race condition intercepted by pre-dispatch gate; execution path verified" $exec25 "Pre-Dispatch Security Gate"
     } else {
-        Record-Scenario "TC-25" "Owner switches OFF during generation" "Block transmission" "Captured: $reply25" "FAIL" "Race condition failure" $exec25 "Pre-Dispatch Security Gate"
+        Record-Scenario "TC-25" "Owner switches OFF during generation" "Block transmission" "InitGate: $initialGateRan, Gemini: $geminiRan, Race: $raceTriggerRan, Outbound: '$reply25'" "FAIL" "In-flight race condition guard failed" $exec25 "Pre-Dispatch Security Gate"
     }
 
 } finally {

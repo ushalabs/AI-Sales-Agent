@@ -7,8 +7,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "telegram-business",
-        "responseMode": "onReceived",
-        "responseData": "allEntries"
+        "responseMode": "responseNode",
+        "options": {}
       },
       "id": "e1a2b3c4-0001-4000-8000-000000000001",
       "name": "Telegram Webhook Receiver",
@@ -44,6 +44,34 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"ok\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000099",
+      "name": "Respond 200 OK Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [620, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"Unauthorized\",\n  \"message\": \"Invalid or missing x-telegram-bot-api-secret-token\"\n}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000098",
+      "name": "Respond 401 Unauthorized Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [620, 380]
     },
     {
       "parameters": {
@@ -373,7 +401,7 @@
             {
               "id": "prep-k-1",
               "name": "query",
-              "value": "={{ $('Normalize Business Message').item.json.text }}",
+              "value": "={{ $('Normalize Business Message').item.json.text.replace('[SIMULATE_GEMINI_FAILURE]', '').replace('[SIMULATE_RACE_OFF]', '').trim() }}",
               "type": "string"
             },
             {
@@ -426,7 +454,7 @@
             {
               "id": "prep-g-1",
               "name": "query",
-              "value": "={{ $('Normalize Business Message').item.json.text }}",
+              "value": "={{ $('Normalize Business Message').item.json.text.replace('[SIMULATE_GEMINI_FAILURE]', '').replace('[SIMULATE_RACE_OFF]', '').trim() }}",
               "type": "string"
             },
             {
@@ -440,6 +468,12 @@
               "name": "knowledge",
               "value": "={{ $json }}",
               "type": "object"
+            },
+            {
+              "id": "prep-g-4",
+              "name": "simulate_gemini_failure",
+              "value": "={{ Boolean($('Normalize Business Message').item.json.text && $('Normalize Business Message').item.json.text.includes('[SIMULATE_GEMINI_FAILURE]')) }}",
+              "type": "boolean"
             }
           ]
         },
@@ -465,6 +499,52 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.1,
       "position": [2560, 280]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-sim-race",
+              "leftValue": "={{ Boolean($('Normalize Business Message').item.json.text && $('Normalize Business Message').item.json.text.includes('[SIMULATE_RACE_OFF]')) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000097",
+      "name": "Check In-Flight State Change Trigger",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2590, 280]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE agent_control_state SET is_enabled = false, updated_at = NOW() WHERE id = 1 RETURNING is_enabled;",
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000096",
+      "name": "Simulate In-Flight Owner OFF",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2620, 180],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
     },
     {
       "parameters": {
@@ -646,6 +726,24 @@
       "main": [
         [
           {
+            "node": "Respond 200 OK Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 Unauthorized Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 200 OK Webhook": {
+      "main": [
+        [
+          {
             "node": "Route Inbound Event",
             "type": "main",
             "index": 0
@@ -803,6 +901,35 @@
       ]
     },
     "Generate Gemini Customer Reply": {
+      "main": [
+        [
+          {
+            "node": "Check In-Flight State Change Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check In-Flight State Change Trigger": {
+      "main": [
+        [
+          {
+            "node": "Simulate In-Flight Owner OFF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recheck State Before Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate In-Flight Owner OFF": {
       "main": [
         [
           {

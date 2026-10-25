@@ -87,7 +87,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const meta = $('Parse Owner Command & Action').first().json;\nconst stateRes = $('Execute Control Query').all().map(i => i.json);\nconst pausedRes = $('Fetch Paused Chats').all().map(i => i.json);\n\nconst agentState = stateRes[0] || { is_enabled: false };\nconst isEnabled = agentState.is_enabled;\nconst pausedChats = pausedRes.filter(p => p.chat_id);\n\nlet statusEmoji = isEnabled ? '🟢 ENABLED' : '🔴 DISABLED';\nlet text = `🤖 <b>AI Sales Agent — Owner Control Panel</b>\\n\\n`;\ntext += `• <b>Global Automation:</b> ${statusEmoji}\\n`;\ntext += `• <b>Timezone:</b> Asia/Manila (PHT, UTC+8)\\n`;\ntext += `• <b>Paused Chats / Human Takeover:</b> ${pausedChats.length > 0 ? `${pausedChats.length} active` : 'None'}\\n`;\n\nif (pausedChats.length > 0) {\n  text += `\\n<b>Paused Customer Chats:</b>\\n`;\n  for (const pc of pausedChats) {\n    text += `  • <code>${pc.chat_id}</code> (${pc.pause_reason || 'Manual takeover'})\\n`;\n  }\n}\n\ntext += `\\n<i>Tap a button below or use backup commands (/on, /off, /status, /pause &lt;id&gt;, /resume &lt;id&gt;).</i>`;\n\n// Construct Native Telegram Inline Keyboard Buttons\nconst keyboard = [\n  [\n    { text: '🟢 Turn ON', callback_data: 'cmd_on' },\n    { text: '🔴 Turn OFF', callback_data: 'cmd_off' }\n  ],\n  [\n    { text: '📊 Refresh Status', callback_data: 'cmd_status' },\n    { text: '⏸️ Paused Chats', callback_data: 'cmd_paused' }\n  ]\n];\n\n// Add one-click Resume buttons for any currently paused customer chats\nfor (const pc of pausedChats.slice(0, 5)) {\n  keyboard.push([\n    { text: `▶️ Resume Customer ${pc.chat_id}`, callback_data: `resume_${pc.chat_id}` }\n  ]);\n}\n\nreturn {\n  chat_id: meta.chatId,\n  message_id: meta.messageId,\n  callback_query_id: meta.callbackQueryId,\n  action: meta.action,\n  reply_text: text,\n  reply_markup: { inline_keyboard: keyboard },\n  is_enabled: isEnabled,\n  paused_count: pausedChats.length\n};"
+        "jsCode": "const meta = $('Parse Owner Command & Action').first().json;\nconst stateRes = $('Execute Control Query').all().map(i => i.json);\nconst pausedRes = $('Fetch Paused Chats').all().map(i => i.json);\n\nconst agentState = stateRes[0] || { is_enabled: false };\nconst isEnabled = agentState.is_enabled;\nconst pausedChats = pausedRes.filter(p => p.chat_id);\n\nlet statusEmoji = isEnabled ? '🟢 ENABLED' : '🔴 DISABLED';\nlet text = `🤖 <b>AI Sales Agent — Owner Control Panel</b>\\n\\n`;\ntext += `• <b>Global Automation:</b> ${statusEmoji}\\n`;\ntext += `• <b>Timezone:</b> Asia/Manila (PHT, UTC+8)\\n`;\ntext += `• <b>Paused Chats / Human Takeover:</b> ${pausedChats.length > 0 ? `${pausedChats.length} active` : 'None'}\\n`;\n\nif (pausedChats.length > 0) {\n  text += `\\n<b>Paused Customer Chats:</b>\\n`;\n  for (const pc of pausedChats) {\n    text += `  • <code>${pc.chat_id}</code> (${pc.pause_reason || 'Manual takeover'})\\n`;\n  }\n}\n\ntext += `\\n<i>Tap a button below or use backup commands (/on, /off, /status, /pause &lt;id&gt;, /resume &lt;id&gt;).</i>`;\n\n// Construct Native Telegram Inline Keyboard Buttons\nconst keyboard = [\n  [\n    { text: '🟢 Turn ON', callback_data: 'cmd_on' },\n    { text: '🔴 Turn OFF', callback_data: 'cmd_off' }\n  ],\n  [\n    { text: '📊 Refresh Status', callback_data: 'cmd_status' },\n    { text: '⏸️ Paused Chats', callback_data: 'cmd_paused' }\n  ]\n];\n\n// Add one-click Resume buttons for any currently paused customer chats\nfor (const pc of pausedChats.slice(0, 5)) {\n  keyboard.push([\n    { text: `▶️ Resume Customer ${pc.chat_id}`, callback_data: `resume_${pc.chat_id}` }\n  ]);\n}\n\nreturn {\n  chat_id: meta.chatId,\n  message_id: meta.messageId,\n  callback_query_id: meta.callbackQueryId,\n  action: meta.action,\n  reply_text: text,\n  reply_markup: { inline_keyboard: keyboard },\n  is_enabled: isEnabled,\n  paused_count: pausedChats.length,\n  is_callback: Boolean(meta.callbackQueryId),\n  method: Boolean(meta.callbackQueryId && meta.messageId) ? 'editMessageText' : 'sendMessage'\n};"
       },
       "id": "owner-format-05",
       "name": "Format Control Panel & Buttons",
@@ -123,7 +123,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=INSERT INTO telegram_simulated_outbound (business_connection_id, chat_id, message_text, status, created_at)\nVALUES ('owner_control', {{ $json.chat_id || 0 }}, '{{ JSON.stringify({ text: $json.reply_text, reply_markup: $json.reply_markup, callback_query_id: $json.callback_query_id, action: $json.action, is_enabled: $json.is_enabled, paused_count: $json.paused_count }).replace(/'/g, \"''\") }}', 'OWNER_COMMAND_CONFIRMED', NOW())\nRETURNING id, chat_id, message_text, status;",
+        "query": "=INSERT INTO telegram_simulated_outbound (business_connection_id, chat_id, message_text, status, created_at)\nVALUES ('owner_control', {{ $json.chat_id || 0 }}, '{{ JSON.stringify({ method: $json.method, text: $json.reply_text, reply_markup: $json.reply_markup, callback_query_id: $json.callback_query_id, message_id: $json.message_id, action: $json.action, is_enabled: $json.is_enabled, paused_count: $json.paused_count }).replace(/'/g, \"''\") }}', 'OWNER_COMMAND_CONFIRMED', NOW())\nRETURNING id, chat_id, message_text, status;",
         "options": {}
       },
       "id": "owner-sim-save-07",
@@ -140,6 +140,65 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-cb-q",
+              "leftValue": "={{ Boolean($json.is_callback && $json.message_id) }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "owner-is-cb-check",
+      "name": "Is Callback Query?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/answerCallbackQuery",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"callback_query_id\": \"{{ $json.callback_query_id }}\",\n  \"text\": \"{{ 'Action executed: ' + $json.action }}\"\n}",
+        "options": {}
+      },
+      "id": "owner-ack-callback",
+      "name": "Answer Telegram Callback Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1940, 240],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/editMessageText",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": {{ $json.chat_id }},\n  \"message_id\": {{ $json.message_id }},\n  \"text\": {{ JSON.stringify($json.reply_text) }},\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {{ JSON.stringify($json.reply_markup) }}\n}",
+        "options": {}
+      },
+      "id": "owner-edit-panel",
+      "name": "Edit Control Panel In-Place",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 240],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
         "sendBody": true,
@@ -148,11 +207,11 @@
         "jsonBody": "={\n  \"chat_id\": {{ $json.chat_id }},\n  \"text\": {{ JSON.stringify($json.reply_text) }},\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {{ JSON.stringify($json.reply_markup) }}\n}",
         "options": {}
       },
-      "id": "owner-notify-06",
+      "id": "owner-send-panel",
       "name": "Send Owner Response",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1720, 300],
+      "position": [1940, 380],
       "continueOnFail": true
     }
   ],
@@ -234,7 +293,36 @@
         ],
         [
           {
+            "node": "Is Callback Query?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Callback Query?": {
+      "main": [
+        [
+          {
+            "node": "Answer Telegram Callback Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Send Owner Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Telegram Callback Query": {
+      "main": [
+        [
+          {
+            "node": "Edit Control Panel In-Place",
             "type": "main",
             "index": 0
           }

@@ -50,7 +50,7 @@ flowchart LR
 The seller manages the bot directly through a private conversation with `@sashtt_bot`.
 
 ### Native Telegram Inline Keyboard Buttons
-When the seller opens the control panel via `/status`, `/panel`, or `/start`, the bot renders interactive inline buttons:
+When the seller opens the control panel via `/status`, `/panel`, or `/start`, the bot renders interactive inline buttons with `answerCallbackQuery` and in-place `editMessageText` updating (no duplicate messages):
 - `[ 🟢 Turn ON ]` / `[ 🔴 Turn OFF ]` — Instantly toggle automated customer replies globally.
 - `[ 📊 Refresh Status ]` — Update live control panel status and active catalog metrics.
 - `[ ⏸️ Paused Chats ]` — Review all chats currently paused under human takeover.
