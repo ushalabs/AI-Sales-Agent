@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:${POSTGRES_IMAGE_TAG:-16-alpine}
+    container_name: sales_agent_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - sales_agent_net_prod
+    # Port 5432 is strictly internal; never exposed to host or internet.
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_IMAGE_TAG:-2.44.6}
+    container_name: sales_agent_n8n_prod
+    restart: unless-stopped
+    ports:
+      # Bound strictly to localhost for secure access via SSH tunneling:
+      # ssh -N -L 5678:localhost:5678 opc@<oracle_ip>
+      - "127.0.0.1:5678:5678"
+    environment:
+      # Database connection
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+
+      # Core and encryption
+      - N8N_HOST=${DOMAIN_NAME}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://${DOMAIN_NAME}/
+      - N8N_WEBHOOK_URL=https://${DOMAIN_NAME}/
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+
+      # Timezone configuration
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-Asia/Manila}
+      - TZ=${TZ:-Asia/Manila}
+
+      # Execution retention & pruning
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=168
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=50000
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+
+      # Telegram Business Configuration
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+      - TELEGRAM_SELLER_USER_ID=${TELEGRAM_SELLER_USER_ID}
+      - TELEGRAM_TEST_MODE=${TELEGRAM_TEST_MODE:-false}
+      - TELEGRAM_ALLOWED_TEST_CHAT_IDS=${TELEGRAM_ALLOWED_TEST_CHAT_IDS}
+
+      # Gemini AI Configuration
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash-lite}
+    volumes:
+      - n8n_data_prod:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:5678/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - sales_agent_net_prod
+
+  reverse_proxy:
+    image: caddy:2.8-alpine
+    container_name: sales_agent_proxy_prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME}
+    volumes:
+      - ./proxy/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - sales_agent_net_prod
+    depends_on:
+      - n8n
+
+networks:
+  sales_agent_net_prod:
+    driver: bridge
+
+volumes:
+  postgres_data_prod:
+  n8n_data_prod:
+  caddy_data:
+  caddy_config:

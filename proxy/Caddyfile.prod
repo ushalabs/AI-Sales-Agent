@@ -1,0 +1,29 @@
+{$DOMAIN_NAME} {
+    # Production security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Route public webhook endpoints to n8n
+    @allowedWebhooks path /webhook/* /webhook-test/* /rest/oauth2-credential/callback
+    handle @allowedWebhooks {
+        reverse_proxy n8n:5678 {
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Host {host}
+        }
+    }
+
+    # Block all other public access to administrative UI / settings
+    handle {
+        respond "Forbidden: Administrative access is restricted to authorized VPN / SSH tunnel." 403
+    }
+
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+}
