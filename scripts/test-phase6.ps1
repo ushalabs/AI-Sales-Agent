@@ -59,7 +59,7 @@ function Simulate-CustomerResponse([string]$query, [string]$customerName = "Cara
         return [PSCustomObject]@{
             Status = "PAYMENT_INQUIRY"
             Query = $query
-            Reply = "Hii po! 💗 We accept GCash (9976111139), Maya (9976111139), and MariBank (13296983960) under F. M. A. Payment deadline is 1 week with 30% non-refundable downpayment (nrdp) po! (🤖 Automated shop assistant)"
+            Reply = "Hii po! 💗 We accept GCash, Maya, and MariBank. Payment deadline is 1 week with 30% non-refundable downpayment (nrdp) po! (🤖 Automated shop assistant)"
             HasDisclosure = $true
             IsTaglish = $true
         }
@@ -155,7 +155,7 @@ function Simulate-CustomerResponse([string]$query, [string]$customerName = "Cara
         $reply = "Hii po! 💗 Our shipping rates via J&T (includes ₱21 voucher):`n• Luzon: Small ₱79 / Medium ₱144 / Large ₱174`n• Visayas: Small ₱74 / Medium ₱134 / Large ₱164`n• Mindanao: Small ₱54 / Medium ₱104 / Large ₱144`nPacking fee: Small ₱20, Medium ₱25, Large ₱30. Delivery days are Monday-Wednesday only po! (🤖 Automated shop assistant)"
     } elseif ($isPayment) {
         $status = "PAYMENT_INQUIRY"
-        $reply = "Hii po! 💗 We accept GCash (9976111139), Maya (9976111139), and MariBank (13296983960) under F. M. A. Payment deadline is 1 week with 30% non-refundable downpayment (nrdp) po! (🤖 Automated shop assistant)"
+        $reply = "Hii po! 💗 We accept GCash, Maya, and MariBank. Payment deadline is 1 week with 30% non-refundable downpayment (nrdp) po! (🤖 Automated shop assistant)"
     } else {
         $reply = "Hii po! 💗 This is Sash's automated shop assistant. We have SEVENTEEN photocards and albums in stock. You can ask for specific members, prices, shipping fees, or payment options po! (🤖 Automated shop assistant)"
     }

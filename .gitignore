@@ -1,3 +1,9 @@
+# Sensitive knowledge base data and customer payment information
+data/knowledge_base.json
+data/*.json
+!data/knowledge_base.example.json
+!data/.gitkeep
+
 # Environment variables and secrets
 .env
 .env.*
