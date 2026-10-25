@@ -1,0 +1,417 @@
+{
+  "name": "Phase 4 - Telegram Business Sales Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram-business",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000001",
+      "name": "Telegram Webhook Receiver",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "telegram-business-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sec-check-1",
+              "leftValue": "={{ $env.TELEGRAM_WEBHOOK_SECRET ? ($json.headers['x-telegram-bot-api-secret-token'] === $env.TELEGRAM_WEBHOOK_SECRET) : true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000002",
+      "name": "Verify Secret Token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "rule-bm",
+                    "leftValue": "={{ $json.body.business_message !== undefined }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "rule-bc",
+                    "leftValue": "={{ $json.body.business_connection !== undefined }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "rule-m",
+                    "leftValue": "={{ $json.body.message !== undefined }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000003",
+      "name": "Route Inbound Event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "norm-1",
+              "name": "update_id",
+              "value": "={{ $json.body.update_id }}",
+              "type": "number"
+            },
+            {
+              "id": "norm-2",
+              "name": "business_connection_id",
+              "value": "={{ $json.body.business_message.business_connection_id || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "norm-3",
+              "name": "chat_id",
+              "value": "={{ $json.body.business_message.chat.id }}",
+              "type": "number"
+            },
+            {
+              "id": "norm-4",
+              "name": "sender_id",
+              "value": "={{ $json.body.business_message.from.id }}",
+              "type": "number"
+            },
+            {
+              "id": "norm-5",
+              "name": "sender_name",
+              "value": "={{ $json.body.business_message.from.first_name || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "norm-6",
+              "name": "is_bot",
+              "value": "={{ $json.body.business_message.from.is_bot || false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "norm-7",
+              "name": "message_id",
+              "value": "={{ $json.body.business_message.message_id }}",
+              "type": "number"
+            },
+            {
+              "id": "norm-8",
+              "name": "text",
+              "value": "={{ $json.body.business_message.text || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "norm-9",
+              "name": "timestamp",
+              "value": "={{ $json.body.business_message.date }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000004",
+      "name": "Normalize Business Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "filter-test-mode",
+              "leftValue": "={{ $env.TELEGRAM_TEST_MODE === 'true' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "filter-has-text",
+              "leftValue": "={{ $json.text && $json.text.trim().length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "filter-has-connection",
+              "leftValue": "={{ $json.business_connection_id && $json.business_connection_id.trim().length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "filter-not-seller",
+              "leftValue": "={{ String($json.sender_id) !== String($env.TELEGRAM_SELLER_USER_ID) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "filter-not-bot",
+              "leftValue": "={{ $json.is_bot !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "filter-allowlist",
+              "leftValue": "={{ ($env.TELEGRAM_ALLOWED_TEST_CHAT_IDS || '').split(',').map(id => id.trim()).includes(String($json.chat_id)) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000005",
+      "name": "Authorization & Safety Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO telegram_processed_updates (update_id, business_connection_id, chat_id, message_id)\nVALUES ({{ $json.update_id }}, '{{ $json.business_connection_id }}', {{ $json.chat_id }}, {{ $json.message_id }})\nON CONFLICT (update_id) DO NOTHING\nRETURNING update_id;",
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000006",
+      "name": "Deduplicate Update",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1340,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"business_connection_id\": \"{{ $('Normalize Business Message').item.json.business_connection_id }}\",\n  \"chat_id\": {{ $('Normalize Business Message').item.json.chat_id }},\n  \"text\": \"Hii po! 💗 This is Sash's automated shop assistant. We're currently testing our automatic replies!\"\n}",
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000007",
+      "name": "Send Predefined Business Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO telegram_business_connections (business_connection_id, user_id, user_chat_id, can_reply, is_enabled, updated_at)\nVALUES ('{{ $json.body.business_connection.id }}', {{ $json.body.business_connection.user.id }}, {{ $json.body.business_connection.user_chat_id }}, {{ $json.body.business_connection.can_reply }}, {{ $json.body.business_connection.is_enabled }}, NOW())\nON CONFLICT (business_connection_id) DO UPDATE SET\n  can_reply = EXCLUDED.can_reply,\n  is_enabled = EXCLUDED.is_enabled,\n  updated_at = NOW()\nRETURNING business_connection_id;",
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000008",
+      "name": "Record Business Connection State",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        900,
+        420
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Webhook Receiver": {
+      "main": [
+        [
+          {
+            "node": "Verify Secret Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Secret Token": {
+      "main": [
+        [
+          {
+            "node": "Route Inbound Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Inbound Event": {
+      "main": [
+        [
+          {
+            "node": "Normalize Business Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Business Connection State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Business Message": {
+      "main": [
+        [
+          {
+            "node": "Authorization & Safety Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorization & Safety Filter": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate Update": {
+      "main": [
+        [
+          {
+            "node": "Send Predefined Business Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

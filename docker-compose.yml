@@ -54,6 +54,13 @@ services:
       - EXECUTIONS_DATA_SAVE_ON_ERROR=${EXECUTIONS_DATA_SAVE_ON_ERROR:-all}
       - EXECUTIONS_DATA_SAVE_ON_SUCCESS=${EXECUTIONS_DATA_SAVE_ON_SUCCESS:-all}
       - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=${EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS:-true}
+
+      # Phase 4: Telegram Business Integration Environment Variables
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+      - TELEGRAM_SELLER_USER_ID=${TELEGRAM_SELLER_USER_ID}
+      - TELEGRAM_TEST_MODE=${TELEGRAM_TEST_MODE:-false}
+      - TELEGRAM_ALLOWED_TEST_CHAT_IDS=${TELEGRAM_ALLOWED_TEST_CHAT_IDS}
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:
@@ -67,6 +74,27 @@ services:
       start_period: 30s
     networks:
       - sales_agent_net
+
+  webhook_proxy:
+    image: nginx:alpine
+    container_name: sales_agent_webhook_proxy
+    restart: unless-stopped
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - sales_agent_net
+    depends_on:
+      - n8n
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: sales_agent_tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://webhook_proxy:80
+    networks:
+      - sales_agent_net
+    depends_on:
+      - webhook_proxy
 
 networks:
   sales_agent_net:

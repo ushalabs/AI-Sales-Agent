@@ -66,6 +66,21 @@ if ([string]::IsNullOrWhiteSpace($pgPassword) -or $pgPassword -like "*replace*")
     Write-Host "Generated secure PostgreSQL database password." -ForegroundColor Green
 }
 
+$webhookSecretMatch = $existingLines | Where-Object { $_ -match '^TELEGRAM_WEBHOOK_SECRET=(.*)$' }
+$webhookSecret = if ($webhookSecretMatch) { ($webhookSecretMatch -replace '^TELEGRAM_WEBHOOK_SECRET=', '').Trim() } else { $null }
+
+if ([string]::IsNullOrWhiteSpace($webhookSecret) -or $webhookSecret -like "*replace*") {
+    $newWebhookSecret = Generate-RandomHex 24
+    if ($webhookSecretMatch) {
+        $existingLines = $existingLines | ForEach-Object {
+            if ($_ -match '^TELEGRAM_WEBHOOK_SECRET=') { "TELEGRAM_WEBHOOK_SECRET=$newWebhookSecret" } else { $_ }
+        }
+    } else {
+        $existingLines += "TELEGRAM_WEBHOOK_SECRET=$newWebhookSecret"
+    }
+    Write-Host "Generated cryptographically secure TELEGRAM_WEBHOOK_SECRET." -ForegroundColor Green
+}
+
 # Ensure other required defaults exist
 $requiredDefaults = [ordered]@{
     "N8N_IMAGE_TAG" = "2.44.6"
@@ -89,6 +104,10 @@ $requiredDefaults = [ordered]@{
     "EXECUTIONS_DATA_SAVE_ON_ERROR" = "all"
     "EXECUTIONS_DATA_SAVE_ON_SUCCESS" = "all"
     "EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS" = "true"
+    "TELEGRAM_BOT_TOKEN" = ""
+    "TELEGRAM_SELLER_USER_ID" = ""
+    "TELEGRAM_TEST_MODE" = "false"
+    "TELEGRAM_ALLOWED_TEST_CHAT_IDS" = ""
 }
 
 foreach ($entry in $requiredDefaults.GetEnumerator()) {
