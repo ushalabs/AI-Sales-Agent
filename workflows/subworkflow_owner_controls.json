@@ -1,0 +1,155 @@
+{
+  "name": "Subworkflow - Owner Controls",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "owner-trig-01",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "owner-auth-check",
+              "leftValue": "={{ String($json.sender_id) === String($env.TELEGRAM_SELLER_USER_ID) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "owner-auth-02",
+      "name": "Verify Seller Authorization",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = ($input.item.json.command || '').trim();\nconst senderId = $input.item.json.sender_id;\nconst parts = text.split(/\\s+/);\nconst cmd = parts[0].toLowerCase();\nconst targetChatId = parts[1] ? parts[1].replace(/[^0-9-]/g, '') : null;\n\nlet action = 'UNKNOWN';\nlet query = '';\n\nif (cmd === '/on') {\n  action = 'ENABLE_GLOBAL';\n  query = `UPDATE agent_control_state SET is_enabled = true, updated_by = ${senderId}, updated_at = NOW() WHERE id = 1 RETURNING is_enabled;`;\n} else if (cmd === '/off') {\n  action = 'DISABLE_GLOBAL';\n  query = `UPDATE agent_control_state SET is_enabled = false, updated_by = ${senderId}, updated_at = NOW() WHERE id = 1 RETURNING is_enabled;`;\n} else if (cmd === '/status') {\n  action = 'GET_STATUS';\n  query = `SELECT is_enabled, sleep_mode_enabled, updated_at FROM agent_control_state WHERE id = 1; SELECT chat_id, pause_reason, updated_at FROM chat_conversation_state WHERE is_paused = true;`;\n} else if (cmd === '/pause' && targetChatId) {\n  action = 'PAUSE_CHAT';\n  query = `INSERT INTO chat_conversation_state (chat_id, is_paused, last_message_from, pause_reason, updated_at) VALUES (${targetChatId}, true, 'seller', 'Manual owner pause', NOW()) ON CONFLICT (chat_id) DO UPDATE SET is_paused = true, pause_reason = 'Manual owner pause', updated_at = NOW() RETURNING chat_id;`;\n} else if (cmd === '/resume' && targetChatId) {\n  action = 'RESUME_CHAT';\n  query = `INSERT INTO chat_conversation_state (chat_id, is_paused, last_message_from, pause_reason, updated_at) VALUES (${targetChatId}, false, 'seller', 'Manual owner resume', NOW()) ON CONFLICT (chat_id) DO UPDATE SET is_paused = false, pause_reason = 'Resumed by owner', updated_at = NOW() RETURNING chat_id;`;\n}\n\nreturn {\n  cmd,\n  action,\n  targetChatId,\n  query,\n  chat_id: $input.item.json.chat_id,\n  sender_id: senderId\n};"
+      },
+      "id": "owner-parse-03",
+      "name": "Parse Owner Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 220]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.query }}",
+        "options": {}
+      },
+      "id": "owner-db-exec-04",
+      "name": "Execute Control Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [860, 220],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cmdInfo = $('Parse Owner Command').first().json;\nconst action = cmdInfo.action;\nconst chat_id = cmdInfo.chat_id;\nlet message = '';\n\nif (action === 'ENABLE_GLOBAL') {\n  message = '✅ [AI Sales Agent]: Automation has been ENABLED globally.\\n\\nThe AI will now automatically process and reply to eligible customer inquiries in your personal Telegram DMs.';\n} else if (action === 'DISABLE_GLOBAL') {\n  message = '🛑 [AI Sales Agent]: Automation has been DISABLED globally.\\n\\nAll automated replies are suspended until explicitly re-enabled via /on.';\n} else if (action === 'PAUSE_CHAT') {\n  message = `⏸️ [Chat Paused]: Customer chat ${cmdInfo.targetChatId} is now PAUSED.\\n\\nThe AI will not respond to this customer until you issue /resume ${cmdInfo.targetChatId}.`;\n} else if (action === 'RESUME_CHAT') {\n  message = `▶️ [Chat Resumed]: Customer chat ${cmdInfo.targetChatId} is now RESUMED.\\n\\nThe AI will handle automated inquiries for this customer again.`;\n} else if (action === 'GET_STATUS') {\n  const results = $input.all().map(i => i.json);\n  const state = results[0] || { is_enabled: false };\n  const statusText = state.is_enabled ? '🟢 ENABLED' : '🔴 DISABLED';\n  message = `📊 [AI Sales Agent Status]\\n• Global Automation: ${statusText}\\n• Timezone: Asia/Manila (PHT, UTC+8)\\n• Last Updated: ${state.updated_at || 'Never'}\\n\\nCommands:\\n/on — Enable AI\\n/off — Disable AI\\n/status — Refresh status\\n/pause <chat_id> — Pause customer\\n/resume <chat_id> — Resume customer`;\n} else {\n  message = '⚠️ Unknown command. Supported commands: /on, /off, /status, /pause <chat_id>, /resume <chat_id>';\n}\n\nreturn {\n  chat_id,\n  reply_text: message\n};"
+      },
+      "id": "owner-format-05",
+      "name": "Format Control Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\n  \"chat_id\": {{ $json.chat_id }},\n  \"text\": {{ JSON.stringify($json.reply_text) }}\n}",
+        "options": {}
+      },
+      "id": "owner-notify-06",
+      "name": "Send Owner Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 220],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Verify Seller Authorization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Seller Authorization": {
+      "main": [
+        [
+          {
+            "node": "Parse Owner Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Owner Command": {
+      "main": [
+        [
+          {
+            "node": "Execute Control Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Control Query": {
+      "main": [
+        [
+          {
+            "node": "Format Control Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Control Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Owner Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
