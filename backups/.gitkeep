@@ -1,0 +1,2 @@
+# Placeholder to ensure the backups directory is tracked in Git.
+# Actual backup dump files (*.sql, *.tar, etc.) are ignored via .gitignore.
