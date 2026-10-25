@@ -1,0 +1,126 @@
+{
+  "shop_metadata": {
+    "name": "Sash's Product Inventory",
+    "item_type": "SEVENTEEN Photocards & Albums",
+    "delivery_days": "Monday–Wednesday only",
+    "currency": "PHP",
+    "shipment_courier": "J&T Express (all rates include ₱21 voucher)"
+  },
+  "payment_rules": {
+    "deadline": "1 week from reservation",
+    "downpayment": "30% non-refundable downpayment (nrdp)",
+    "methods": [
+      {
+        "name": "GCash",
+        "account_number": "9976111139",
+        "account_name": "F. M. A."
+      },
+      {
+        "name": "Maya",
+        "account_number": "9976111139",
+        "account_name": "F. M. A."
+      },
+      {
+        "name": "MariBank",
+        "account_number": "13296983960",
+        "account_name": "F. M. A."
+      }
+    ]
+  },
+  "shipping_rates": {
+    "Luzon": { "small": 79, "medium": 144, "large": 174 },
+    "Visayas": { "small": 74, "medium": 134, "large": 164 },
+    "Mindanao": { "small": 54, "medium": 104, "large": 144 }
+  },
+  "packing_fees": [
+    {
+      "size": "Small",
+      "price_php": 20,
+      "capacity": "1-10 photocards",
+      "inclusions": "toploader, chipboard, bubble wrap, bubble mailer"
+    },
+    {
+      "size": "Medium",
+      "price_php": 25,
+      "capacity": "10-20 photocards, keychains",
+      "inclusions": "toploader, chipboard, bubble wrap, corrugated box"
+    },
+    {
+      "size": "Large",
+      "price_php": 30,
+      "capacity": "albums",
+      "inclusions": "bubble wrap, chipboard, cardboard"
+    }
+  ],
+  "products": [
+    { "id": 1, "member": "S.COUPS", "product_name": "—", "price_php": 0, "stock": 0, "notes": "" },
+    { "id": 2, "member": "JEONGHAN", "product_name": "8th Anniversary CONNECT", "price_php": 350, "stock": 1, "notes": "With dent on upper left" },
+    { "id": 3, "member": "JEONGHAN", "product_name": "FML - Weverse Global Carat Ver. POB", "price_php": 280, "stock": 1, "notes": "With PVC Card" },
+    { "id": 4, "member": "JOSHUA", "product_name": "Cafe in Seoul - Barbie", "price_php": 300, "stock": 1, "notes": "" },
+    { "id": 5, "member": "JOSHUA", "product_name": "Cafe in Seoul - Prince", "price_php": 300, "stock": 1, "notes": "" },
+    { "id": 6, "member": "JOSHUA", "product_name": "In the SOOP - Weverse Shop POB", "price_php": 150, "stock": 1, "notes": "" },
+    { "id": 7, "member": "JOSHUA", "product_name": "HEAVEN - CARAT Version album", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 8, "member": "JOSHUA", "product_name": "17 Is Right Here - HEAR Version album", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 9, "member": "JUN", "product_name": "FML - UMS Japan LOVE fanmeeting, Tokyo exclusive", "price_php": 400, "stock": 1, "notes": "" },
+    { "id": 10, "member": "JUN", "product_name": "FML - Joeun/Beatroad fansign POB", "price_php": 250, "stock": 1, "notes": "With scratch on upper corner" },
+    { "id": 11, "member": "JUN", "product_name": "BE THE SUN - Digital Code", "price_php": 200, "stock": 1, "notes": "" },
+    { "id": 12, "member": "JUN", "product_name": "17RH - MusicPlant DEAR Version POB", "price_php": 200, "stock": 1, "notes": "" },
+    { "id": 13, "member": "JUN", "product_name": "STF - Weverse Albums Version", "price_php": 150, "stock": 1, "notes": "" },
+    { "id": 14, "member": "JUN", "product_name": "FML - Deluxe Version", "price_php": 100, "stock": 1, "notes": "With dent on backprint" },
+    { "id": 15, "member": "HOSHI", "product_name": "TEEN, AGE - Orange Version", "price_php": 350, "stock": 1, "notes": "" },
+    { "id": 16, "member": "HOSHI", "product_name": "SECTOR 17 - Shopee fansign POB", "price_php": 250, "stock": 1, "notes": "" },
+    { "id": 17, "member": "WONWOO", "product_name": "HENG;GARAE - Hana Version", "price_php": 450, "stock": 1, "notes": "" },
+    { "id": 18, "member": "WONWOO", "product_name": "SECTOR 17 - ONINNASIA Fansign R2", "price_php": 400, "stock": 1, "notes": "With dent across the face" },
+    { "id": 19, "member": "WONWOO", "product_name": "FTS - EP. 1 Control", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 20, "member": "WOOZI", "product_name": "STF - Weverse Global Lucky Draw", "price_php": 250, "stock": 1, "notes": "" },
+    { "id": 21, "member": "WOOZI", "product_name": "HEAVEN - AM 5:26 Version", "price_php": 250, "stock": 1, "notes": "" },
+    { "id": 22, "member": "WOOZI", "product_name": "STF - Weverse Albums Version", "price_php": 200, "stock": 1, "notes": "" },
+    { "id": 23, "member": "WOOZI", "product_name": "SECTOR 17 - New Heights Version", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 24, "member": "WOOZI", "product_name": "HAPPY BURSTDAY - New Burstday Version", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 25, "member": "WOOZI", "product_name": "STF - CARAT Version", "price_php": 50, "stock": 2, "notes": "" },
+    { "id": 26, "member": "WOOZI", "product_name": "FTS - CARAT Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 27, "member": "WOOZI", "product_name": "17RH - HEAR Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 28, "member": "WOOZI", "product_name": "DICON - D'FESTA Mini Edition", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 29, "member": "DK", "product_name": "17RH - DEAR Version", "price_php": 350, "stock": 1, "notes": "" },
+    { "id": 30, "member": "DK", "product_name": "17RH - HEAR Version", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 31, "member": "DK", "product_name": "BSS SW - Regular Version", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 32, "member": "MINGYU", "product_name": "HEAVEN - Weverse / Music Korea Fansign", "price_php": 300, "stock": 1, "notes": "" },
+    { "id": 33, "member": "MINGYU", "product_name": "ATTACCA - CARAT Version", "price_php": 250, "stock": 2, "notes": "" },
+    { "id": 34, "member": "MINGYU", "product_name": "HENG:GARAE - SET Version", "price_php": 150, "stock": 1, "notes": "" },
+    { "id": 35, "member": "MINGYU", "product_name": "FML - Fallen, Misfit, Lost (Grey Back)", "price_php": 150, "stock": 1, "notes": "" },
+    { "id": 36, "member": "MINGYU", "product_name": "HAPPY BURSTDAY - CARAT Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 37, "member": "MINGYU", "product_name": "17RH - HEAR Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 38, "member": "MINGHAO", "product_name": "FML - UMS Japan LOVE Fanmeeting Tokyo Exclusive", "price_php": 300, "stock": 1, "notes": "" },
+    { "id": 39, "member": "MINGHAO", "product_name": "FML - M2U Record Lucky Draw", "price_php": 300, "stock": 1, "notes": "" },
+    { "id": 40, "member": "MINGHAO", "product_name": "HAPPY BURSTDAY - Weverse Japan HOLIDAY Saitama Exclusive", "price_php": 300, "stock": 1, "notes": "With small dent on neck" },
+    { "id": 41, "member": "MINGHAO", "product_name": "17RH - Weverse Global DEAR Version POB", "price_php": 300, "stock": 1, "notes": "With Sticker" },
+    { "id": 42, "member": "MINGHAO", "product_name": "AN ODE - The Poet Version (Beige Back)", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 43, "member": "MINGHAO", "product_name": "CARAT LAND 2024 - Key Version", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 44, "member": "MINGHAO", "product_name": "SEVENTEEN RIGHT HERE - World Tour DC", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 45, "member": "MINGHAO", "product_name": "CARAT LAND 2023 - Memory Book", "price_php": 100, "stock": 1, "notes": "With Sticker" },
+    { "id": 46, "member": "MINGHAO", "product_name": "THE NAME;17 - Future Dream Version", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 47, "member": "MINGHAO", "product_name": "ATTACCA - Op.1 Version", "price_php": 100, "stock": 2, "notes": "" },
+    { "id": 48, "member": "MINGHAO", "product_name": "FACE THE SUN - Ep.3 Ray Version", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 49, "member": "MINGHAO", "product_name": "17 IS RIGHT HERE - DEAR CARAT Version", "price_php": 50, "stock": 3, "notes": "" },
+    { "id": 50, "member": "MINGHAO", "product_name": "SPILL THE FEELS - CARAT Version", "price_php": 50, "stock": 3, "notes": "" },
+    { "id": 51, "member": "MINGHAO", "product_name": "FML - CARAT Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 52, "member": "SEUNGKWAN", "product_name": "6th CARAT Membership Kit (Basketbolista)", "price_php": 300, "stock": 1, "notes": "" },
+    { "id": 53, "member": "SEUNGKWAN", "product_name": "ATTACCA - CARAT Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 54, "member": "VERNON", "product_name": "V8 - Weverse Global Fan Party Application PC", "price_php": 350, "stock": 1, "notes": "Sealed" },
+    { "id": 55, "member": "VERNON", "product_name": "V8 - Weverse Global Regular POB", "price_php": 250, "stock": 1, "notes": "" },
+    { "id": 56, "member": "VERNON", "product_name": "SHOHIKIGEN - Right Here Aichi Exclusive (Weverse Japan)", "price_php": 200, "stock": 1, "notes": "" },
+    { "id": 57, "member": "VERNON", "product_name": "SHOHIKIGEN - Right Here Fukuoka Exclusive (UMS Japan)", "price_php": 200, "stock": 1, "notes": "" },
+    { "id": 58, "member": "VERNON", "product_name": "SHOHIKIGEN - Tower Records POB", "price_php": 200, "stock": 1, "notes": "" },
+    { "id": 59, "member": "VERNON", "product_name": "FML - UMS Japan Regular Version POB", "price_php": 200, "stock": 1, "notes": "" },
+    { "id": 60, "member": "VERNON", "product_name": "FACE THE SUN - HMV CARAT Version POB", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 61, "member": "VERNON", "product_name": "HEAVEN - AM 5:26 Version", "price_php": 100, "stock": 1, "notes": "" },
+    { "id": 62, "member": "VERNON", "product_name": "ATTACCA - CARAT Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 63, "member": "VERNON", "product_name": "SPILL THE FEELS - CARAT Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 64, "member": "DINO", "product_name": "FML - UMS Japan LOVE fanmeeting, Tokyo exclusive", "price_php": 200, "stock": 1, "notes": "" },
+    { "id": 65, "member": "DINO", "product_name": "FTS - CARAT Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 66, "member": "DINO", "product_name": "HAPPY BURSTDAY - CARAT Version", "price_php": 50, "stock": 1, "notes": "" },
+    { "id": 67, "member": "UNIT", "product_name": "V8 - Weverse Global Regular POB", "price_php": 250, "stock": 1, "notes": "" },
+    { "id": 68, "member": "UNIT", "product_name": "V8 - RATS NEST Version", "price_php": 150, "stock": 1, "notes": "" },
+    { "id": 69, "member": "UNIT", "product_name": "V8 - REV Version", "price_php": 150, "stock": 1, "notes": "" }
+  ]
+}
