@@ -17,7 +17,11 @@
     },
     {
       "parameters": {
-        "workflowId": "0cGbWSPG0Z14h3So",
+        "workflowId": {
+          "__rl": true,
+          "value": "0cGbWSPG0Z14h3So",
+          "mode": "id"
+        },
         "mode": "each",
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -34,7 +38,11 @@
     },
     {
       "parameters": {
-        "workflowId": "wMZ3vsdPji1oSAr0",
+        "workflowId": {
+          "__rl": true,
+          "value": "wMZ3vsdPji1oSAr0",
+          "mode": "id"
+        },
         "mode": "each",
         "workflowInputs": {
           "mappingMode": "defineBelow",

@@ -76,15 +76,25 @@ Fill in `.env`:
 - `GEMINI_API_KEY`: From Google AI Studio
 - `GEMINI_MODEL`: `gemini-3.5-flash-lite`
 
-### 2. Start Services & Sync Knowledge Base
-```bash
-docker compose up -d
-powershell -ExecutionPolicy Bypass -File ./scripts/sync-knowledge.ps1
+### 2. Start Services & Setup Credentials
+```powershell
+# Start PostgreSQL, n8n, Nginx proxy, and Cloudflare Tunnel
+powershell -ExecutionPolicy Bypass -File ./scripts/start-local.ps1
+
+# Import native PostgreSQL credentials into n8n
+powershell -ExecutionPolicy Bypass -File ./scripts/setup-credentials.ps1
 ```
 
-### 3. Run Acceptance Test Suite
-```bash
-powershell -ExecutionPolicy Bypass -File ./scripts/test-acceptance-suite.ps1
+### 3. Run Acceptance Test Suite (25 Scenarios)
+```powershell
+# Execute complete local simulator acceptance test suite
+powershell -ExecutionPolicy Bypass -File ./scripts/run-simulator.ps1
+```
+All 25 scenarios (product search, stock validation, shipping & packing rates, payment policies, language & tone matching, owner `/on`/`/off`/`/pause` controls, human takeover auto-pause, webhook token verification, and fail-safe fallback) are verified automatically. See the full audit report in [**`docs/LOCAL_ACCEPTANCE_REPORT.md`**](docs/LOCAL_ACCEPTANCE_REPORT.md).
+
+### 4. Stop Services Gracefully
+```powershell
+powershell -ExecutionPolicy Bypass -File ./scripts/stop-local.ps1
 ```
 
 ---
@@ -105,13 +115,13 @@ See the complete production setup guide in [**`DEPLOYMENT.md`**](DEPLOYMENT.md).
 
 | Test Suite | Scope | Status | Details |
 | :--- | :--- | :---: | :--- |
+| **Local Acceptance (E2E)** | 25 Automated Simulator Scenarios | `PASS (25/25)` | 100% pass rate across catalog, safety gates, owner controls & policies |
 | **Phase 3** | Docker Infrastructure & PostgreSQL | `PASS` | Healthy containers with persistent volumes |
 | **Phase 4** | Webhook Proxy Security | `PASS` | `/webhook/*` routed; admin endpoints return 403 |
 | **Phase 5** | Knowledge Base Retrieval | `PASS` | 6/6 tests passed (exact match, aliases, typos, OOS) |
 | **Phase 6** | Gemini 3.5 Sales Dialogue | `PASS` | 5/5 multi-turn scenarios passed with zero hallucination |
 | **Phase 7** | Owner Controls & Human Takeover | `PASS` | 6/6 tests passed (`/on`, `/off`, `/pause`, manual typing) |
 | **Phase 8** | Reliability & Deduplication | `PASS` | Atomic database constraint & loop prevention |
-| **Live TG** | Telegram Business DM Reply | `DEFERRED` | Verified with fixtures; runs on Oracle Cloud VM |
 
 ---
 

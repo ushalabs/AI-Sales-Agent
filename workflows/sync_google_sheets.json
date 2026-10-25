@@ -1,0 +1,299 @@
+{
+  "id": "eSF3SSYCgDMeJQmR",
+  "name": "Sync - Google Sheets Knowledge Integration",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "sync-trig-manual",
+      "name": "Manual / Subworkflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 200]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "sync-trig-schedule",
+      "name": "Hourly Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 380]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1v0NOqdyODyLDOSvWMlhDJcH7lS1euitKUYF3t1i65Pg",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Product Inventory",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "sync-gs-inventory",
+      "name": "Fetch Product Inventory Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PhsExAwUfErlT36v",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1v0NOqdyODyLDOSvWMlhDJcH7lS1euitKUYF3t1i65Pg",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "SF and PF Rates",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "sync-gs-rates",
+      "name": "Fetch Shipping & Packing Rates Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 380],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PhsExAwUfErlT36v",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1v0NOqdyODyLDOSvWMlhDJcH7lS1euitKUYF3t1i65Pg",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Mode of Payments",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "sync-gs-payments",
+      "name": "Fetch Payment Methods Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 560],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PhsExAwUfErlT36v",
+          "name": "Google Sheets account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const invItems = $('Fetch Product Inventory Sheet').all();\nconst ratesItems = $('Fetch Shipping & Packing Rates Sheet').all();\nconst payItems = $('Fetch Payment Methods Sheet').all();\n\n// Check if API call failed\nconst firstInv = invItems[0]?.json || {};\nif (firstInv.error) {\n  return {\n    status: 'FAILED',\n    error: firstInv.error.message || 'Google Sheets API authentication or connection failure',\n    productsCount: 0\n  };\n}\n\n// Parse Products\nlet parsedProducts = [];\nlet idCounter = 1;\nfor (const item of invItems) {\n  const row = item.json;\n  const member = (row.Member || row.member || '').trim();\n  const productName = (row['Product Name'] || row.product_name || row['Item Name'] || '').trim();\n  const rawPrice = row.Price || row['Price (PHP)'] || row.price || '0';\n  const rawStock = row.Stock || row.Quantity || row.stock || '0';\n  const notes = (row['Condition / Notes'] || row.Notes || row.notes || '').trim();\n\n  if (member && productName) {\n    const price = parseInt(String(rawPrice).replace(/[^0-9]/g, ''), 10) || 0;\n    const stock = parseInt(String(rawStock).replace(/[^0-9]/g, ''), 10) || 0;\n    parsedProducts.push({\n      id: idCounter++,\n      member: member.toUpperCase(),\n      product_name: productName,\n      price_php: price,\n      stock,\n      notes,\n      keywords: `${member} ${productName} ${notes}`.toLowerCase()\n    });\n  }\n}\n\nreturn {\n  status: 'SUCCESS',\n  productsCount: parsedProducts.length,\n  products: parsedProducts\n};"
+      },
+      "id": "sync-process-data",
+      "name": "Parse & Validate Sheets Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-sync-ok",
+              "leftValue": "={{ $json.status === 'SUCCESS' && $json.productsCount > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "sync-check-status",
+      "name": "Is Sync Data Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [940, 380]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO sync_history (sync_type, status, products_synced, error_message, synced_at)\nVALUES ('GOOGLE_SHEETS', 'SUCCESS', {{ $json.productsCount }}, NULL, NOW())\nRETURNING id, status, products_synced, synced_at;",
+        "options": {}
+      },
+      "id": "sync-log-success",
+      "name": "Log Sync Success",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1180, 280],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO sync_history (sync_type, status, products_synced, error_message, synced_at)\nVALUES ('GOOGLE_SHEETS', 'FAILED', 0, '{{ $json.error ? $json.error.replace(/'/g, \"''\") : \"Google API unavailable or invalid format\" }}', NOW())\nRETURNING id, status, error_message, synced_at;",
+        "options": {}
+      },
+      "id": "sync-log-failure",
+      "name": "Log Sync Fallback Preservation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1180, 480],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual / Subworkflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Product Inventory Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Shipping & Packing Rates Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Payment Methods Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hourly Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Product Inventory Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Shipping & Packing Rates Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Payment Methods Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Product Inventory Sheet": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate Sheets Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Shipping & Packing Rates Sheet": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate Sheets Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Payment Methods Sheet": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate Sheets Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate Sheets Data": {
+      "main": [
+        [
+          {
+            "node": "Is Sync Data Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Sync Data Valid?": {
+      "main": [
+        [
+          {
+            "node": "Log Sync Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Sync Fallback Preservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

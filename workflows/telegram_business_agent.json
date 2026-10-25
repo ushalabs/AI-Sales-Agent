@@ -1,5 +1,7 @@
 {
+  "id": "ktvkVp0E0z2blc4n",
   "name": "Phase 4 - Telegram Business Sales Agent",
+  "active": true,
   "nodes": [
     {
       "parameters": {
@@ -26,7 +28,7 @@
           "conditions": [
             {
               "id": "sec-check-1",
-              "leftValue": "={{ $env.TELEGRAM_WEBHOOK_SECRET ? ($json.headers['x-telegram-bot-api-secret-token'] === $env.TELEGRAM_WEBHOOK_SECRET) : true }}",
+              "leftValue": "={{ Boolean($env.TELEGRAM_WEBHOOK_SECRET && $json.headers && $json.headers['x-telegram-bot-api-secret-token'] === $env.TELEGRAM_WEBHOOK_SECRET) }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -189,15 +191,61 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-is-seller",
+              "leftValue": "={{ String($json.sender_id) === String($env.TELEGRAM_SELLER_USER_ID) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000020",
+      "name": "Is Sender Seller?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
-        "query": "=SELECT is_enabled FROM agent_control_state WHERE id = 1;\nSELECT is_paused FROM chat_conversation_state WHERE chat_id = {{ $json.chat_id }};",
+        "query": "=INSERT INTO chat_conversation_state (chat_id, is_paused, last_message_from, pause_reason, updated_at)\nVALUES ({{ $('Normalize Business Message').item.json.chat_id }}, true, 'seller', 'Human takeover: seller replied in customer DM', NOW())\nON CONFLICT (chat_id) DO UPDATE SET\n  is_paused = true,\n  last_message_from = 'seller',\n  pause_reason = 'Human takeover: seller replied in customer DM',\n  updated_at = NOW()\nRETURNING chat_id, is_paused;",
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000021",
+      "name": "Enforce Human Takeover",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1340, 100],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  acs.is_enabled,\n  COALESCE(ccs.is_paused, false) AS is_paused\nFROM agent_control_state acs\nLEFT JOIN chat_conversation_state ccs ON ccs.chat_id = {{ $('Normalize Business Message').item.json.chat_id }}\nWHERE acs.id = 1;",
         "options": {}
       },
       "id": "e1a2b3c4-0001-4000-8000-000000000005",
       "name": "Check Agent State & Pauses",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1120, 200],
+      "position": [1340, 280],
       "credentials": {
         "postgres": {
           "id": "postgres-sales-agent",
@@ -216,13 +264,7 @@
           "conditions": [
             {
               "id": "gate-has-text",
-              "leftValue": "={{ $('Normalize Business Message').item.json.text && $('Normalize Business Message').item.json.text.trim().length > 0 }}",
-              "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
-            },
-            {
-              "id": "gate-not-seller",
-              "leftValue": "={{ String($('Normalize Business Message').item.json.sender_id) !== String($env.TELEGRAM_SELLER_USER_ID) }}",
+              "leftValue": "={{ Boolean($('Normalize Business Message').item.json.text && $('Normalize Business Message').item.json.text.trim().length > 0) }}",
               "rightValue": true,
               "operator": { "type": "boolean", "operation": "equals" }
             },
@@ -233,8 +275,20 @@
               "operator": { "type": "boolean", "operation": "equals" }
             },
             {
-              "id": "gate-test-mode-or-enabled",
-              "leftValue": "={{ $env.TELEGRAM_TEST_MODE === 'true' ? ($env.TELEGRAM_ALLOWED_TEST_CHAT_IDS || '').split(',').map(id => id.trim()).includes(String($('Normalize Business Message').item.json.chat_id)) : ($json.is_enabled === true) }}",
+              "id": "gate-enabled",
+              "leftValue": "={{ $json.is_enabled === true }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            },
+            {
+              "id": "gate-not-paused",
+              "leftValue": "={{ $json.is_paused !== true }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            },
+            {
+              "id": "gate-test-chat",
+              "leftValue": "={{ $env.TELEGRAM_TEST_MODE === 'true' ? ($env.TELEGRAM_ALLOWED_TEST_CHAT_IDS || '').split(',').map(id => id.trim()).includes(String($('Normalize Business Message').item.json.chat_id)) : true }}",
               "rightValue": true,
               "operator": { "type": "boolean", "operation": "equals" }
             }
@@ -246,7 +300,7 @@
       "name": "Safety & Authorization Gate",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1340, 200]
+      "position": [1560, 280]
     },
     {
       "parameters": {
@@ -258,7 +312,7 @@
       "name": "Atomic Deduplication Check",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1560, 200],
+      "position": [1780, 280],
       "credentials": {
         "postgres": {
           "id": "postgres-sales-agent",
@@ -268,39 +322,220 @@
     },
     {
       "parameters": {
-        "workflowId": "0cGbWSPG0Z14h3So",
-        "mode": "each",
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "query": "={{ $('Normalize Business Message').item.json.text }}"
-          }
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "dedupe-ok",
+              "leftValue": "={{ Boolean($json.update_id) }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
         }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000022",
+      "name": "Verify Not Duplicate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 280]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prep-k-1",
+              "name": "query",
+              "value": "={{ $('Normalize Business Message').item.json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-k-2",
+              "name": "customer_name",
+              "value": "={{ $('Normalize Business Message').item.json.sender_name }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-k-3",
+              "name": "chat_id",
+              "value": "={{ $('Normalize Business Message').item.json.chat_id }}",
+              "type": "number"
+            },
+            {
+              "id": "prep-k-4",
+              "name": "business_connection_id",
+              "value": "={{ $('Normalize Business Message').item.json.business_connection_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000031",
+      "name": "Prepare Knowledge Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2110, 280]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "0cGbWSPG0Z14h3So",
+          "mode": "id"
+        },
+        "mode": "each"
       },
       "id": "e1a2b3c4-0001-4000-8000-000000000008",
       "name": "Retrieve Grounded Knowledge",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.1,
-      "position": [1780, 200]
+      "position": [2260, 280]
     },
     {
       "parameters": {
-        "workflowId": "wMZ3vsdPji1oSAr0",
-        "mode": "each",
-        "workflowInputs": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "query": "={{ $('Normalize Business Message').item.json.text }}",
-            "customer_name": "={{ $('Normalize Business Message').item.json.sender_name }}",
-            "knowledge": "={{ $json }}"
-          }
-        }
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prep-g-1",
+              "name": "query",
+              "value": "={{ $('Normalize Business Message').item.json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-g-2",
+              "name": "customer_name",
+              "value": "={{ $('Normalize Business Message').item.json.sender_name }}",
+              "type": "string"
+            },
+            {
+              "id": "prep-g-3",
+              "name": "knowledge",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000032",
+      "name": "Prepare Gemini Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2410, 280]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wMZ3vsdPji1oSAr0",
+          "mode": "id"
+        },
+        "mode": "each"
       },
       "id": "e1a2b3c4-0001-4000-8000-000000000009",
       "name": "Generate Gemini Customer Reply",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.1,
-      "position": [2000, 200]
+      "position": [2560, 280]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  acs.is_enabled,\n  COALESCE(ccs.is_paused, false) AS is_paused\nFROM agent_control_state acs\nLEFT JOIN chat_conversation_state ccs ON ccs.chat_id = {{ $('Normalize Business Message').item.json.chat_id }}\nWHERE acs.id = 1;",
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000023",
+      "name": "Recheck State Before Dispatch",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2660, 280],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "final-enabled",
+              "leftValue": "={{ $json.is_enabled === true }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            },
+            {
+              "id": "final-not-paused",
+              "leftValue": "={{ $json.is_paused !== true }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000024",
+      "name": "Final Pre-Dispatch Authorization Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2880, 280]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sim-mode-check",
+              "leftValue": "={{ $env.TELEGRAM_SIMULATOR_MODE === 'true' }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000025",
+      "name": "Check Dispatch Mode",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3100, 280]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO telegram_simulated_outbound (business_connection_id, chat_id, message_text, status, created_at)\nVALUES ('{{ $('Normalize Business Message').item.json.business_connection_id }}', {{ $('Normalize Business Message').item.json.chat_id }}, '{{ $('Generate Gemini Customer Reply').item.json.reply_text.replace(/'/g, \"''\") }}', 'CAPTURED', NOW())\nRETURNING id, chat_id, message_text, status;",
+        "options": {}
+      },
+      "id": "e1a2b3c4-0001-4000-8000-000000000026",
+      "name": "Capture Simulated Outbound",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [3320, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-sales-agent",
+          "name": "PostgreSQL Sales Agent"
+        }
+      }
     },
     {
       "parameters": {
@@ -308,14 +543,15 @@
         "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
         "sendBody": true,
         "contentType": "json",
-        "body": "={\n  \"business_connection_id\": \"{{ $('Normalize Business Message').item.json.business_connection_id }}\",\n  \"chat_id\": {{ $('Normalize Business Message').item.json.chat_id }},\n  \"text\": {{ JSON.stringify($json.reply_text) }}\n}",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"business_connection_id\": \"{{ $('Normalize Business Message').item.json.business_connection_id }}\",\n  \"chat_id\": {{ $('Normalize Business Message').item.json.chat_id }},\n  \"text\": {{ JSON.stringify($('Generate Gemini Customer Reply').item.json.reply_text) }}\n}",
         "options": {}
       },
       "id": "e1a2b3c4-0001-4000-8000-000000000010",
       "name": "Send Reply on Behalf of Seller",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2220, 200],
+      "position": [3320, 360],
       "continueOnFail": true
     },
     {
@@ -328,7 +564,7 @@
       "name": "Record Connection Event",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [900, 380],
+      "position": [900, 420],
       "credentials": {
         "postgres": {
           "id": "postgres-sales-agent",
@@ -338,7 +574,11 @@
     },
     {
       "parameters": {
-        "workflowId": "GzGhjXdy38xmzByE",
+        "workflowId": {
+          "__rl": true,
+          "value": "GzGhjXdy38xmzByE",
+          "mode": "id"
+        },
         "mode": "each",
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -353,7 +593,7 @@
       "name": "Execute Owner Control Workflow",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.1,
-      "position": [900, 520]
+      "position": [900, 560]
     }
   ],
   "connections": {
@@ -408,6 +648,24 @@
       "main": [
         [
           {
+            "node": "Is Sender Seller?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Sender Seller?": {
+      "main": [
+        [
+          {
+            "node": "Enforce Human Takeover",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Check Agent State & Pauses",
             "type": "main",
             "index": 0
@@ -441,6 +699,28 @@
       "main": [
         [
           {
+            "node": "Verify Not Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Not Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Prepare Knowledge Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Knowledge Input": {
+      "main": [
+        [
+          {
             "node": "Retrieve Grounded Knowledge",
             "type": "main",
             "index": 0
@@ -449,6 +729,17 @@
       ]
     },
     "Retrieve Grounded Knowledge": {
+      "main": [
+        [
+          {
+            "node": "Prepare Gemini Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Gemini Input": {
       "main": [
         [
           {
@@ -461,6 +752,46 @@
     },
     "Generate Gemini Customer Reply": {
       "main": [
+        [
+          {
+            "node": "Recheck State Before Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recheck State Before Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Final Pre-Dispatch Authorization Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Pre-Dispatch Authorization Gate": {
+      "main": [
+        [
+          {
+            "node": "Check Dispatch Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Dispatch Mode": {
+      "main": [
+        [
+          {
+            "node": "Capture Simulated Outbound",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Send Reply on Behalf of Seller",
