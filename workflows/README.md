@@ -22,7 +22,7 @@ This directory contains version-controlled, sanitized JSON exports of all n8n wo
        │ subworkflow_owner_    │     │ subworkflow_knowledge_│     │ subworkflow_gemini_   │
        │ controls.json         │     │ retrieval.json        │     │ agent.json            │
        │                       │     │                       │     │                       │
-       │ • /on, /off, /status  │     │ • 69 SEVENTEEN items  │     │ • Gemini 2.5 Flash-   │
+       │ • /on, /off, /status  │     │ • 69 SEVENTEEN items  │     │ • Gemini 3.5 Flash-   │
        │ • /pause, /resume     │     │ • SF & PF Rates       │     │   Lite via HTTP       │
        │ • Human takeover      │     │ • Payment Methods     │     │ • Grounded Taglish    │
        │   detection           │     │ • Fuzzy matching      │     │ • Safety guardrails   │
@@ -52,7 +52,7 @@ This directory contains version-controlled, sanitized JSON exports of all n8n wo
 ### 3. `subworkflow_gemini_agent.json` (Grounded AI Sales Agent)
 - **Workflow ID**: `wMZ3vsdPji1oSAr0`
 - **Role**:
-  - Direct HTTP calls to Google Gemini (`gemini-2.5-flash-lite`).
+  - Direct HTTP calls to Google Gemini (`gemini-3.5-flash-lite`).
   - Adheres strictly to retrieved product attributes, shop policies, and packing fees.
   - Discloses automated status: `[Automated Response: Shop AI Assistant]`.
   - Taglish polite persona with deterministic fallback if API is unavailable.

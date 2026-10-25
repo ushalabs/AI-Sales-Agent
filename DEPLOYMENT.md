@@ -34,7 +34,7 @@ This document provides a production-ready guide to deploying the **AI Sales Agen
           │  │                     n8n Container                      │  │
           │  │                 (Port 5678 internal)                   │  │
           │  │    • Telegram Webhook Handler                          │  │
-          │  │    • Gemini Flash-Lite Subworkflow                     │  │
+          │  │    • Gemini 3.5 Flash-Lite Subworkflow                 │  │
           │  │    • Knowledge Retrieval Subworkflow                   │  │
           │  │    • Human Takeover & Owner Controls                   │  │
           │  └──────────────┬─────────────────────────▲───────────────┘  │

@@ -22,7 +22,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $env.GEMINI_MODEL || 'gemini-2.5-flash-lite' }}:generateContent?key={{ $env.GEMINI_API_KEY }}",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $env.GEMINI_MODEL || 'gemini-3.5-flash-lite' }}:generateContent?key={{ $env.GEMINI_API_KEY }}",
         "sendBody": true,
         "contentType": "json",
         "body": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        { \"text\": {{ JSON.stringify($json.prompt) }} }\n      ]\n    }\n  ],\n  \"systemInstruction\": {\n    \"parts\": [\n      { \"text\": {{ JSON.stringify($json.systemInstruction) }} }\n    ]\n  },\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\",\n    \"temperature\": 0.2\n  }\n}",
